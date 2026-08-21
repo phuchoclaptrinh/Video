@@ -1,0 +1,88 @@
+# ==============================================================
+# Override cho môi trường PRODUCTION:
+#   - dùng image đã build sẵn trên GHCR (do CI push), không build tại server
+#   - không mở port DB/Redis ra ngoài, chỉ nginx nghe 80/443
+#   - giới hạn tài nguyên + gom log
+#
+# Chạy:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Yêu cầu: đặt IMAGE_REGISTRY và IMAGE_TAG trong .env trên server
+# ==============================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-restart: &restart-policy
+  restart: always
+
+services:
+  postgres:
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 2G}
+
+  redis:
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 512M}
+
+  backend:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ndhoang2k5/create_video_vo3}/backend:${IMAGE_TAG:-latest}
+    build: !reset null
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      replicas: 2
+      resources:
+        limits: {cpus: "2", memory: 1G}
+
+  worker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ndhoang2k5/create_video_vo3}/backend:${IMAGE_TAG:-latest}
+    build: !reset null
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      replicas: 3        # gen video là tác vụ dài -> scale worker nhiều hơn API
+      resources:
+        limits: {cpus: "2", memory: 2G}
+
+  beat:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ndhoang2k5/create_video_vo3}/backend:${IMAGE_TAG:-latest}
+    build: !reset null
+    <<: *restart-policy
+    logging: *default-logging
+
+  ai-service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ndhoang2k5/create_video_vo3}/ai-service:${IMAGE_TAG:-latest}
+    build: !reset null
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      replicas: 2
+      resources:
+        limits: {cpus: "2", memory: 1G}
+
+  frontend:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ndhoang2k5/create_video_vo3}/frontend:${IMAGE_TAG:-latest}
+    build: !reset null
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 512M}
+
+  nginx:
+    <<: *restart-policy
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # chứng chỉ TLS do certbot cấp trên host
+      - /etc/letsencrypt:/etc/letsencrypt:ro

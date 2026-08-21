@@ -1,0 +1,32 @@
+Copyright (c) 2026 Nguyen Duy Hoang. All Rights Reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This software and its source code are proprietary and confidential.
+No part of this project may be copied, modified, distributed, published,
+sublicensed, or used to create derivative works without the prior written
+permission of the copyright holder.
+
+Unauthorized copying, distribution, or use of this software, via any medium,
+is strictly prohibited.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------
+GHI CHU
+
+Day la giay phep DOC QUYEN, phu hop voi repo private / san pham thuong mai.
+Neu sau nay ban muon mo ma nguon, thay toan bo noi dung file nay bang giay
+phep MIT hoac Apache-2.0.
+
+Du an nay su dung dich vu AI cua ben thu ba (Google Veo 3, Seedance 1.5).
+Video tao ra chiu rang buoc boi dieu khoan su dung cua tung nha cung cap:
+  - Google Gemini API Terms: https://ai.google.dev/gemini-api/terms
+  - Volcengine Ark / BytePlus ModelArk Terms (xem trang chinh chu)
+--------------------------------------------------------------------------

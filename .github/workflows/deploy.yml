@@ -1,0 +1,162 @@
+name: Deploy
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Môi trường triển khai
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false     # KHÔNG huỷ deploy đang chạy giữa chừng
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------- build & push image
+  build:
+    name: Build & push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, ai-service, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Đăng nhập GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sinh tag & label
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_APP_NAME=${{ vars.NEXT_PUBLIC_APP_NAME }}
+
+  # ------------------------------------------- quét lỗ hổng image
+  scan:
+    name: Trivy — quét image
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        service: [backend, ai-service, frontend]
+    steps:
+      - name: Quét ${{ matrix.service }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: CRITICAL,HIGH
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+  # ------------------------------------------------ deploy server
+  deploy:
+    name: Deploy lên ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    needs: [build, scan]
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Secrets cần khai báo trong repo Settings > Secrets and variables:
+      #   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_PORT (tuỳ chọn)
+      #   DEPLOY_PATH  (ví dụ /opt/create-video-vo3)
+      - name: Copy compose file lên server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "docker-compose.yml,docker-compose.prod.yml,infra/"
+          target: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Kéo image mới & khởi động lại
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            export IMAGE_REGISTRY=${{ env.IMAGE_PREFIX }}
+            export IMAGE_TAG=${GITHUB_REF_NAME:-latest}
+
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Migration chạy TRƯỚC khi đổi image app, tránh app mới gặp schema cũ
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              run --rm backend alembic upgrade head
+
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              up -d --remove-orphans
+
+            docker image prune -f --filter "until=168h"
+
+      - name: Kiểm tra sau deploy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "${{ vars.APP_URL }}/api/v1/health" > /dev/null; then
+              echo "Deploy thành công"
+              exit 0
+            fi
+            echo "Chờ service khởi động... ($i/30)"
+            sleep 10
+          done
+          echo "Health check thất bại sau 5 phút"
+          exit 1

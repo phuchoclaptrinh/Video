@@ -1,0 +1,78 @@
+# ==============================================================
+# Override cho môi trường DEV:
+#   - mount source vào container => sửa code là reload, không cần build lại
+#   - mở port trực tiếp ra host để gọi/debug từng service
+#   - bật hot reload cho uvicorn / next dev
+#
+# Chạy:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# ==============================================================
+
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  backend:
+    build:
+      target: development
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./backend:/app
+      - /app/.venv          # giữ venv của image, không để host ghi đè
+      - ./storage:/app/storage
+
+  worker:
+    build:
+      target: development
+    # watchdog restart worker khi file .py thay đổi
+    command: ["watchmedo", "auto-restart", "--directory=/app/app", "--pattern=*.py", "--recursive", "--", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=debug", "--concurrency=2", "-Q", "video,default"]
+    environment:
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+      - ./storage:/app/storage
+
+  beat:
+    build:
+      target: development
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+
+  ai-service:
+    build:
+      target: development
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "/app/app"]
+    ports:
+      - "${AI_SERVICE_PORT:-8001}:8001"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./ai-service:/app
+      - /app/.venv
+      - ./storage:/app/storage
+
+  frontend:
+    build:
+      target: development
+    command: ["npm", "run", "dev"]
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"     # cần cho bind mount trên Windows/WSL
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next

@@ -1,0 +1,57 @@
+# ==============================================================
+# AI service — cấu hình tooling. Dependencies ở requirements.txt.
+# ==============================================================
+
+[project]
+name = "vo3-ai-service"
+version = "0.1.0"
+description = "Sinh prompt video và điều phối model Veo 3 / Seedance 1.5"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["app", "tests"]
+exclude = [".venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ASYNC", "S", "T20", "SIM", "RUF"]
+ignore = [
+    "E501",
+    "B008",   # Depends() trong default argument — idiom FastAPI
+    "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+strict = true
+ignore_missing_imports = true      # SDK provider thường thiếu type stub
+exclude = [".venv/"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-ra", "--strict-markers", "--cov=app", "--cov-report=term-missing"]
+markers = [
+    "unit: test không gọi mạng",
+    "provider: test gọi API provider thật — tốn tiền, không chạy trong CI",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/main.py", "*/tests/*"]
