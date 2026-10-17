@@ -60,5 +60,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS http://localhost:8001/health || exit 1
 
 # Service này chủ yếu chờ I/O (gọi API provider) nên ít worker là đủ
-ENV WEB_CONCURRENCY=2
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers ${WEB_CONCURRENCY}"]
+# 1 worker: số luồng Seedvis đang chạy được đếm trong bộ nhớ của tiến trình.
+ENV WEB_CONCURRENCY=1
+CMD ["sh", "-c", "uvicorn app.main:app --host :: --port 8001 --workers ${WEB_CONCURRENCY}"]

@@ -683,3 +683,21 @@ def test_poyo_credential_is_encrypted_and_survives_restart(tmp_path, monkeypatch
     with TestClient(create_app(internal_key="vault-test-secret")) as client:
         assert client.get(path, headers=headers).json() == {"configured": True}
         assert client.delete(path, headers=headers).json() == {"configured": False}
+
+
+def test_keys_saved_by_another_worker_process_are_picked_up(tmp_path, monkeypatch):
+    # Two uvicorn workers share one key file; a key saved through one must work in the other.
+    monkeypatch.setenv("PROVIDER_CREDENTIAL_PATH", str(tmp_path / "provider-credentials.json.enc"))
+    monkeypatch.delenv("POYO_API_KEY", raising=False)
+    monkeypatch.delenv("SEEDVIS_API_KEY", raising=False)
+    headers = {"X-Internal-Key": "vault-test-secret"}
+    with TestClient(create_app(internal_key="vault-test-secret")) as first, \
+            TestClient(create_app(internal_key="vault-test-secret")) as second:
+        for provider in ("seedvis", "poyo"):
+            path = f"/internal/v1/video/{provider}/credential"
+            assert second.get(path, headers=headers).json() == {"configured": False}
+            assert first.put(path, headers=headers, json={"api_key": f"{provider}-key-123456"}).json() == {
+                "configured": True}
+            assert second.get(path, headers=headers).json() == {"configured": True}
+            assert first.delete(path, headers=headers).json() == {"configured": False}
+            assert second.get(path, headers=headers).json() == {"configured": False}

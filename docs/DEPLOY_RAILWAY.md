@@ -20,7 +20,8 @@ Mỗi service có file `railway.toml` trong thư mục của nó. File này cấ
 2. Tạo đủ 3 service từ cùng repo (**+ New → GitHub Repo**). Đặt tên **đúng**: `frontend`, `backend`, `ai-service`. Các biến ở bước 4 tham chiếu theo tên này.
 3. Ở **Settings** của từng service:
    - **Root Directory**: `/frontend`, `/backend` hoặc `/ai-service`.
-   - **Config file path** (nếu Railway không tự nhận): `/frontend/railway.toml`, `/backend/railway.toml`, `/ai-service/railway.toml`.
+   - **Config file path**: `/frontend/railway.toml`, `/backend/railway.toml`, `/ai-service/railway.toml`. Nên đặt rõ, vì Railway có thể chỉ tìm `railway.toml` ở gốc repo. Kiểm tra: tab Deployments → bản deploy → **Details** phải hiện lệnh chạy `uvicorn ... --workers 1` cho backend/ai-service.
+   - Dockerfile cũng mặc định 1 tiến trình (`WEB_CONCURRENCY=1`), nên **đừng đặt `WEB_CONCURRENCY` lớn hơn 1**: backend sẽ xử lý trùng trên SQLite, ai-service đếm sai số luồng Seedvis.
 
 ## 2. Volume
 

@@ -144,6 +144,15 @@ def create_app(
         os.getenv("PROVIDER_CREDENTIAL_PATH", "./storage/provider-credentials.json.enc"), key
     )
     seedvis_keys = SeedvisKeyPool(vault, os.getenv("SEEDVIS_API_KEY"))
+    # Saved keys live in the vault file; adapters keep a copy in memory per process.
+    credential_stamp = {"value": None}
+
+    def vault_stamp():
+        try:
+            stat = vault.path.stat()
+        except OSError:
+            return None
+        return stat.st_mtime_ns, stat.st_size
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -198,9 +207,29 @@ def create_app(
                     )
                 providers = ProviderRegistry(configured)
             application.state.pipeline = VideoGenerationPipeline(providers, seedvis_keys)
+            credential_stamp["value"] = vault_stamp()
             yield
 
     application = FastAPI(title="Person 3 Video Engine", lifespan=lifespan)
+
+    @application.middleware("http")
+    async def keep_credentials_fresh(request, call_next):
+        # Another worker process may have saved or removed a key since this one loaded them.
+        if hasattr(application.state, "pipeline") and vault_stamp() != credential_stamp["value"]:
+            credential_stamp["value"] = vault_stamp()
+            for name, value in (
+                ("poyo", vault.get("poyo") or os.getenv("POYO_API_KEY")),
+                ("seedvis", seedvis_keys.primary_key()),
+            ):
+                try:
+                    adapter = credential_provider(name)
+                except ProviderError:
+                    continue
+                if value:
+                    adapter.set_api_key(value)
+                else:
+                    adapter.clear_api_key()
+        return await call_next(request)
 
     def authorize(x_internal_key: str = Header(default="")):
         if not key or not secrets.compare_digest(x_internal_key, key):

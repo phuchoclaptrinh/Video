@@ -68,6 +68,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
 
-# Số worker nên bằng (2 x CPU) + 1; chỉnh qua biến WEB_CONCURRENCY
-ENV WEB_CONCURRENCY=4
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY}"]
+# Mặc định 1 worker: tiến trình API còn chạy worker render/chiến dịch trên SQLite, nhiều worker
+# sẽ xử lý trùng và khoá database. `::` nhận cả IPv4 lẫn mạng nội bộ IPv6 (Railway).
+ENV WEB_CONCURRENCY=1
+CMD ["sh", "-c", "uvicorn app.main:app --host :: --port 8000 --workers ${WEB_CONCURRENCY}"]
