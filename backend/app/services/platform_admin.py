@@ -1,8 +1,11 @@
 """Admin console: usage statistics, every user's videos and queue, and account management."""
 
 import os
+import secrets
+import sqlite3
 import time
 from collections import Counter
+from pathlib import Path
 
 from sqlalchemy import func
 
@@ -40,6 +43,21 @@ class PlatformAdminMixin:
             # Local single-user installs keep full access until ADMIN_EMAILS is set.
             return True
         return user["email"].lower() in configured or bool(user.get("is_admin"))
+
+    def database_snapshot(self) -> Path:
+        """A consistent copy of the SQLite database, safe to take while the app keeps writing."""
+        url = self.engine.url
+        if url.get_backend_name() != "sqlite" or not url.database or url.database == ":memory:":
+            raise HTTPException(409, "Chỉ tải được bản sao lưu khi dùng database SQLite")
+        target = self.storage / "backups" / f"snapshot-{secrets.token_hex(8)}.sqlite3"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source, copy = sqlite3.connect(url.database), sqlite3.connect(target)
+        try:
+            source.backup(copy)
+        finally:
+            copy.close()
+            source.close()
+        return target
 
     def require_admin(self, user: dict) -> dict:
         if not self.is_admin(user):

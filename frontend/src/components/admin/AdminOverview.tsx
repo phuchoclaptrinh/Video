@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, RefreshCw } from 'lucide-react';
+import { DatabaseBackup, Loader2, RefreshCw } from 'lucide-react';
 import { useAdminData } from './AdminConsole';
 import { errorLabel } from './admin-labels';
 
@@ -73,9 +73,20 @@ export function AdminOverview({ onOpenVideos }: { onOpenVideos: () => void }) {
           <span className="workflow-eyebrow">Tổng quan</span>
           <h1>Hoạt động hệ thống</h1>
         </div>
-        <button className="flow-icon" title="Làm mới" onClick={reload} disabled={loading}>
-          <RefreshCw size={17} className={loading ? 'spin' : ''} />
-        </button>
+        <div className="admin-heading-actions">
+          <a
+            className="flow-button"
+            href="/api/v1/admin/backup"
+            download
+            title="Tải bản sao lưu database SQLite (tài khoản, credit, dự án)"
+          >
+            <DatabaseBackup size={15} />
+            Tải bản sao lưu
+          </a>
+          <button className="flow-icon" title="Làm mới" onClick={reload} disabled={loading}>
+            <RefreshCw size={17} className={loading ? 'spin' : ''} />
+          </button>
+        </div>
       </div>
       <div className="admin-cards">
         {cards.map((card) => (

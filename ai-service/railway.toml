@@ -1,0 +1,13 @@
+# Railway config for the AI service (Root Directory: /ai-service). Reached only privately by the backend.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["/ai-service/**"]
+
+[deploy]
+# One process keeps the encrypted key store and Seedvis slot counts consistent.
+startCommand = "uvicorn app.main:app --host :: --port 8001 --workers 1"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

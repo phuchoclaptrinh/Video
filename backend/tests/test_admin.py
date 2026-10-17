@@ -111,3 +111,22 @@ def test_sign_in_response_says_whether_to_open_the_admin_console(client, monkeyp
     assert register(client, ADMIN).json()["is_admin"] is True
     assert login(client, MEMBER).json()["is_admin"] is False
     assert login(client, ADMIN).json() == {"id": user_id(client, ADMIN), "email": ADMIN, "is_admin": True}
+
+
+def test_admin_downloads_a_consistent_database_backup(client, monkeypatch, tmp_path):
+    import sqlite3
+
+    monkeypatch.setenv("ADMIN_EMAILS", ADMIN)
+    register(client, MEMBER)
+    assert client.get("/api/v1/admin/backup").status_code == 403
+    register(client, ADMIN)
+    response = client.get("/api/v1/admin/backup")
+    assert response.status_code == 200
+    assert "vo3-backup-" in response.headers["content-disposition"]
+    copy = tmp_path / "copy.sqlite3"
+    copy.write_bytes(response.content)
+    with sqlite3.connect(copy) as db:
+        emails = {row[0] for row in db.execute("select email from platform_users")}
+    assert emails == {MEMBER, ADMIN}
+    # The temporary snapshot is removed once it has been sent.
+    assert not list((client.platform.storage / "backups").glob("snapshot-*"))

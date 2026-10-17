@@ -1,0 +1,13 @@
+# Railway config for the Next.js frontend (Root Directory: /frontend). The only public service:
+# it serves the app and proxies /api/* to the backend over the private network.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["/frontend/**"]
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

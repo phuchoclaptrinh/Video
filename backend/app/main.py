@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi import Path as PathParam
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from sqlalchemy import delete
 
@@ -470,6 +471,15 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
     @app.delete("/api/v1/planner-credential")
     def delete_planner_credential(user=Depends(admin)):
         return app.state.platform.delete_planner_credential()
+
+    @app.get("/api/v1/admin/backup")
+    def admin_backup(user=Depends(admin)):
+        snapshot = app.state.platform.database_snapshot()
+        return FileResponse(
+            snapshot, media_type="application/vnd.sqlite3",
+            filename=time.strftime("vo3-backup-%Y%m%d-%H%M%S.sqlite3"),
+            background=BackgroundTask(snapshot.unlink, missing_ok=True),
+        )
 
     @app.get("/api/v1/admin/overview")
     def admin_overview(user=Depends(admin)):

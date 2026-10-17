@@ -1,0 +1,14 @@
+# Railway config for the backend service (Root Directory: /backend).
+# One replica only: the API process also runs the render/campaign worker on a SQLite file.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["/backend/**"]
+
+[deploy]
+# `::` also listens on Railway's private network (IPv6); one process for the SQLite worker.
+startCommand = "uvicorn app.main:app --host :: --port 8000 --workers 1"
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
