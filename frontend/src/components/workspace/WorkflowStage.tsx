@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   ImagePlus,
   Loader2,
+  RefreshCw,
   Sparkles,
   Timer,
 } from 'lucide-react';
@@ -42,6 +43,10 @@ export function WorkflowStage({
   );
   const complete = job?.status === 'COMPLETED' && Boolean(job.video_url);
   const pending = job && !terminal.includes(job.status);
+  // Every scene finished; only joining them failed, which can be retried without new renders.
+  const mergeFailed = Boolean(
+    job?.story_batch && job.status === 'FAILED' && job.error?.startsWith('story_merge_failed'),
+  );
   if (step === 'plan' && selected)
     return (
       <div className="workflow-storyboard">
@@ -177,13 +182,26 @@ export function WorkflowStage({
         </ol>
         {job?.error && (
           <p className="flow-inline-error" role="alert">
-            {job.error}
+            {mergeFailed
+              ? 'Các cảnh đã tạo xong nhưng bước ghép thành video bị lỗi. Bấm "Ghép lại video" để thử lại; các cảnh không bị tạo lại nên không trừ thêm credit.'
+              : job.error}
           </p>
         )}
-        <button className="flow-button" onClick={() => onStep('plan')}>
-          <Clapperboard size={16} />
-          {job?.error ? 'Kiểm tra kịch bản & thử lại' : 'Xem kịch bản'}
-        </button>
+        {mergeFailed ? (
+          <button
+            className="flow-button primary"
+            disabled={Boolean(w.videoBusyId)}
+            onClick={() => void w.retryMerge(selected!.message, event)}
+          >
+            {w.videoBusyId ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+            <span>{w.videoBusyId ? 'Đang ghép video' : 'Ghép lại video'}</span>
+          </button>
+        ) : (
+          <button className="flow-button" onClick={() => onStep('plan')}>
+            <Clapperboard size={16} />
+            <span>{job?.error ? 'Kiểm tra kịch bản & thử lại' : 'Xem kịch bản'}</span>
+          </button>
+        )}
       </div>
     );
   const image = preview || event?.reference_image_url;

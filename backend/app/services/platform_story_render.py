@@ -541,6 +541,8 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
                     .values(status="COMPLETED", filename=filename, size_bytes=size)
                 )
         except Exception as exc:
+            # Without this the reason (missing clip file, timeout, duration mismatch…) is lost.
+            logger.exception("Story merge failed for batch %s", row["id"])
             with self.engine.begin() as db:
                 db.execute(
                     update(story_batches)

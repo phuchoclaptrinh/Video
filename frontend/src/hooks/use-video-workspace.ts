@@ -658,6 +658,38 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
     }
   }
 
+  /** Merge the finished scenes again; no scene is rendered or charged a second time. */
+  async function retryMerge(message: ChatMessage, event: VideoEvent) {
+    if (!event.job) return;
+    setVideoBusyId(message.id);
+    setError('');
+    try {
+      await request(`/story-batches/${event.job.id}/merge`, { method: 'POST' });
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+    try {
+      const updated = await request<ChatMessage>(`/chat/video-events/${message.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ job_id: event.job.id }),
+      });
+      const job = videoEvent(updated)?.job;
+      if (job)
+        setMessages((current) =>
+          current.map((item) => {
+            const currentEvent = item.id === message.id ? videoEvent(item) : null;
+            return currentEvent
+              ? { ...item, content: JSON.stringify({ ...currentEvent, job }) }
+              : item;
+          }),
+        );
+    } catch {
+      /* The stored status stays; reloading the project shows the latest one. */
+    } finally {
+      setVideoBusyId(null);
+    }
+  }
+
   async function regenerateFailedReference(message: ChatMessage, event: VideoEvent) {
     if (!event.project_id) return;
     setVideoBusyId(message.id);
@@ -1047,6 +1079,7 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
     batchRender,
     prepareReference,
     regenerateFailedReference,
+    retryMerge,
     approveVideo,
     reviseVideo,
     reviseFailedScene,
