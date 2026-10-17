@@ -2890,3 +2890,33 @@ def test_output_download_accepts_poyo_cdn(tmp_path, monkeypatch):
         assert (platform.storage / "videos" / filename).read_bytes() == b"mock poyo video"
     finally:
         platform.close()
+
+
+def test_story_failing_before_any_scene_can_retry_once_the_key_is_added(client, monkeypatch):
+    register(client)
+    draft = client.post("/api/v1/plans", json={"prompt": "A host explains a recipe"}).json()
+    platform = client.platform
+    use_legacy_test_provider(platform, "poyo")
+    platform.public_base_url = "https://video.example.test"
+    with platform.engine.begin() as db:
+        payload = db.execute(select(drafts.c.payload).where(drafts.c.id == draft["id"])).scalar_one()
+        payload["story_plan"] = {"clips": [{
+            "index": 1, "video_prompt": "The host introduces the meal in the kitchen.", "voice_script": "Xin chao.",
+        }]}
+        db.execute(update(drafts).where(drafts.c.id == draft["id"]).values(payload=payload))
+    configured = {"value": True}
+    monkeypatch.setattr(platform, "provider_credential_status", lambda: {"configured": configured["value"]})
+    monkeypatch.setattr(platform, "_validate_public_backend_target", lambda: None)
+    monkeypatch.setattr(platform, "_validate_public_continuity_image", lambda _draft_id: None)
+    monkeypatch.setattr(platform, "_story_media_ready", lambda *_args: True)
+    batch = client.post(f"/api/v1/plans/{draft['id']}/generate", json={"confirm_paid": True}).json()
+    configured["value"] = False  # the key is missing when the worker submits the first scene
+    platform.process_story_batches()
+    failed = client.get(f"/api/v1/generations/{batch['id']}").json()
+    assert failed["status"] == "FAILED" and "API key" in failed["error"]
+    assert failed["clip_progress"]["completed"] == 0
+    assert failed["retryable"] is True
+    configured["value"] = True
+    retried = client.post(f"/api/v1/plans/{draft['id']}/generate", json={"confirm_paid": True})
+    assert retried.status_code == 202
+    assert client.get(f"/api/v1/generations/{batch['id']}").json()["status"] != "FAILED"

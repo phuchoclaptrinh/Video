@@ -47,7 +47,8 @@ class PlatformGenerationMixin:
         if self.provider != "fake" and not self.paid_enabled:
             raise HTTPException(409, "Paid generation is disabled on this server")
         if self.provider in {"poyo", "seedvis"} and not self.provider_credential_status()["configured"]:
-            raise HTTPException(409, f"Bạn cần thêm {self.provider.title()} API key trong phần API key")
+            # Shown to members too: say what is wrong without asking them for an admin-only key.
+            raise HTTPException(409, f"Model video này chưa sẵn sàng: quản trị viên cần thêm {self.provider.title()} API key. Hãy thử lại sau.")
         if self.provider != "fake" and not confirm_paid:
             raise HTTPException(409, "Bạn cần xác nhận thao tác tạo video có tính phí")
         payload = copy.deepcopy(draft["payload"])

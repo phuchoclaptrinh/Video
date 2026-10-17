@@ -112,22 +112,10 @@ class PlatformStoryPreparationMixin:
                         409, "native_audio_unsupported_model: choose a video model with native audio; external TTS is not substituted",
                     )
                 generation_ids = existing["generation_ids"] if existing else []
+                # Nothing reached the video provider yet, so preparation can always run again
+                # (missing key, credits, hidden model, reference or voice problems).
                 retry_preparation = bool(
-                    existing
-                    and existing["status"] == "FAILED"
-                    and not generation_ids
-                    and (
-                        str(existing["error_code"] or "").startswith("clip_preparation_failed")
-                        or str(existing["error_code"] or "").startswith(
-                            (
-                                "voice_timeline_mismatch",
-                                "voice_track_empty",
-                                "audio_quality_failed",
-                                "planner_credentials_missing",
-                                "continuity_reference_unreachable",
-                            )
-                        )
-                    )
+                    existing and existing["status"] == "FAILED" and not generation_ids
                 )
                 retry_unbilled_clip = False
                 retry_bad_scene = False
@@ -685,16 +673,8 @@ class PlatformStoryPreparationMixin:
         complete = sum(status == "COMPLETED" for status in statuses)
         clip_count = self._story_clip_count(row.get("draft_id"))
         status = row["status"]
-        preparation_error = str(row.get("error_code") or "").startswith(
-            (
-                "clip_preparation_failed",
-                "voice_timeline_mismatch",
-                "voice_track_empty",
-                "audio_quality_failed",
-                "planner_credentials_missing",
-                "continuity_reference_unreachable",
-            )
-        )
+        # Failed before any scene was submitted: preparing again bills no video.
+        preparation_error = not row["generation_ids"]
         retryable_provider_failure = bool(
             jobs
             and downstream_ready
