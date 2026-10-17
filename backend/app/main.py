@@ -97,6 +97,10 @@ class AdminUserUpdate(BaseModel):
     disabled: bool | None = None
 
 
+class PasswordInput(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
 class CreditAdjustment(BaseModel):
     delta: int = Field(ge=-1_000_000, le=1_000_000)
     note: str = Field(default="", max_length=200)
@@ -506,6 +510,15 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
     def admin_update_user(user_id: Annotated[str, PathParam(pattern=r"^[a-f0-9]{32}$")], body: AdminUserUpdate,
                           user=Depends(admin)):
         return app.state.platform.admin_update_user(user, user_id, is_admin=body.is_admin, disabled=body.disabled)
+
+    @app.post("/api/v1/admin/users", status_code=201)
+    def admin_create_user(body: Credentials, user=Depends(admin)):
+        return app.state.platform.admin_create_user(body.email, body.password)
+
+    @app.put("/api/v1/admin/users/{user_id}/password")
+    def admin_set_password(user_id: Annotated[str, PathParam(pattern=r"^[a-f0-9]{32}$")], body: PasswordInput,
+                           user=Depends(admin)):
+        return app.state.platform.admin_set_password(user_id, body.password)
 
     @app.get("/api/v1/admin/users/{user_id}/credits")
     def admin_user_credits(user_id: Annotated[str, PathParam(pattern=r"^[a-f0-9]{32}$")], user=Depends(admin)):

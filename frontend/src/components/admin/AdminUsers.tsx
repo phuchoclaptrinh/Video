@@ -1,10 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Coins, Lock, LockOpen, RefreshCw, Search, ShieldCheck, ShieldOff } from 'lucide-react';
+import {
+  Coins,
+  KeyRound,
+  Lock,
+  LockOpen,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  ShieldOff,
+  UserPlus,
+} from 'lucide-react';
 import { request } from '@/lib/chat-api';
 import { formatTime, useAdminData } from './AdminConsole';
 import { AdminCreditDialog } from './AdminCredits';
+import { AdminAccountDialog } from './AdminAccountDialog';
 
 type AdminUser = {
   id: string;
@@ -25,6 +36,8 @@ export function AdminUsers({ currentUserId }: { currentUserId: string }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [creditUser, setCreditUser] = useState<AdminUser | null>(null);
+  // null: closed; 'new': create an account; a user: reset that user's password.
+  const [accountTarget, setAccountTarget] = useState<AdminUser | 'new' | null>(null);
   const visible = (users.data || []).filter((user) =>
     user.email.toLowerCase().includes(query.trim().toLowerCase()),
   );
@@ -58,14 +71,20 @@ export function AdminUsers({ currentUserId }: { currentUserId: string }) {
             trong ADMIN_EMAILS của file .env.
           </p>
         </div>
-        <button
-          className="flow-icon"
-          title="Làm mới"
-          onClick={users.reload}
-          disabled={users.loading}
-        >
-          <RefreshCw size={17} className={users.loading ? 'spin' : ''} />
-        </button>
+        <div className="admin-heading-actions">
+          <button className="flow-button primary" onClick={() => setAccountTarget('new')}>
+            <UserPlus size={15} />
+            <span>Tạo tài khoản</span>
+          </button>
+          <button
+            className="flow-icon"
+            title="Làm mới"
+            onClick={users.reload}
+            disabled={users.loading}
+          >
+            <RefreshCw size={17} className={users.loading ? 'spin' : ''} />
+          </button>
+        </div>
       </div>
       <label className="flow-search admin-search">
         <Search size={16} />
@@ -128,6 +147,13 @@ export function AdminUsers({ currentUserId }: { currentUserId: string }) {
                   </td>
                   <td>{formatTime(user.last_seen)}</td>
                   <td className="admin-actions">
+                    <button
+                      className="flow-icon"
+                      title="Đặt lại mật khẩu"
+                      onClick={() => setAccountTarget(user)}
+                    >
+                      <KeyRound size={16} />
+                    </button>
                     {!user.admin_from_env && !self && (
                       <button
                         className="flow-icon"
@@ -172,6 +198,13 @@ export function AdminUsers({ currentUserId }: { currentUserId: string }) {
         </table>
         {users.data && !visible.length && <p className="admin-empty">Không tìm thấy tài khoản.</p>}
       </div>
+      {accountTarget && (
+        <AdminAccountDialog
+          user={accountTarget === 'new' ? undefined : accountTarget}
+          onClose={() => setAccountTarget(null)}
+          onSaved={users.reload}
+        />
+      )}
       {creditUser && (
         <AdminCreditDialog
           user={creditUser}

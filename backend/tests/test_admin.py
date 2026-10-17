@@ -130,3 +130,24 @@ def test_admin_downloads_a_consistent_database_backup(client, monkeypatch, tmp_p
     assert emails == {MEMBER, ADMIN}
     # The temporary snapshot is removed once it has been sent.
     assert not list((client.platform.storage / "backups").glob("snapshot-*"))
+
+
+def test_only_admins_create_accounts_and_reset_passwords(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", ADMIN)
+    credentials = {"email": MEMBER, "password": "test-password-123"}
+    closed = client.post("/api/v1/auth/register", json=credentials)
+    assert closed.status_code == 403 and "quản trị viên" in closed.json()["detail"]
+    # A listed admin can still sign up, so a new install can get its first admin.
+    assert client.post("/api/v1/auth/register", json={"email": ADMIN, "password": "test-password-123"}).status_code == 200
+    created = client.post("/api/v1/admin/users", json=credentials)
+    assert created.status_code == 201 and created.json()["email"] == MEMBER and created.json()["credits"] == 100
+    assert client.post("/api/v1/admin/users", json=credentials).status_code == 409
+    member = created.json()["id"]
+    assert login(client, MEMBER).json()["is_admin"] is False
+    # Members cannot create accounts or reset passwords.
+    assert client.post("/api/v1/admin/users", json={"email": "x@example.com", "password": "test-password-123"}).status_code == 403
+    assert client.put(f"/api/v1/admin/users/{member}/password", json={"password": "new-password-456"}).status_code == 403
+    login(client, ADMIN)
+    assert client.put(f"/api/v1/admin/users/{member}/password", json={"password": "new-password-456"}).status_code == 200
+    assert login(client, MEMBER).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"email": MEMBER, "password": "new-password-456"}).status_code == 200

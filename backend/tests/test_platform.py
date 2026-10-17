@@ -154,9 +154,14 @@ def client(tmp_path):
 
 
 def register(client, email="one@example.com"):
-    return client.post(
-        "/api/v1/auth/register", json={"email": email, "password": "test-password-123"}
-    )
+    """Sign up, or when self sign-up is closed create the account like an admin would and sign in."""
+    credentials = {"email": email, "password": "test-password-123"}
+    response = client.post("/api/v1/auth/register", json=credentials)
+    if response.status_code == 403:
+        with client.platform.engine.begin() as db:
+            client.platform.create_account(db, email, credentials["password"])
+        response = client.post("/api/v1/auth/login", json=credentials)
+    return response
 
 
 def use_legacy_test_provider(platform, provider):

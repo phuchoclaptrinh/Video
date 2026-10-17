@@ -96,6 +96,7 @@ Admin là email trong `ADMIN_EMAILS` của `.env` (phân cách bằng dấu ph�
 - **Tổng quan:** số người dùng, video 24 giờ/7 ngày, video đang chạy, tỉ lệ lỗi, số cảnh đã tạo theo provider, luồng Seedvis đang dùng, biểu đồ 14 ngày và lỗi hay gặp.
 - **Video & hàng đợi:** video của mọi người dùng theo trạng thái, tiến độ từng cảnh, key Seedvis đang dùng; hủy video đang chạy; hàng đợi cảnh đang chờ hoặc đang tạo.
 - **API key:** nhiều key Seedvis, key PoYo và OpenAI. Chỉ admin xem và sửa được key; người dùng thường không còn thấy key trong Cài đặt.
+- **Tài khoản:** người dùng không tự đăng ký; admin tạo tài khoản và đặt lại mật khẩu trong tab Người dùng. Riêng email trong `ADMIN_EMAILS` được tự đăng ký ở `/admin` để tạo admin đầu tiên của một bản cài mới (để trống `ADMIN_EMAILS` thì vẫn cho đăng ký như chạy một mình).
 - **Người dùng:** tìm theo email, số dự án và video, lần hoạt động gần nhất, số credit (bấm để cộng/trừ kèm ghi chú và xem lịch sử); cấp/bỏ quyền admin, khóa/mở khóa (khóa thì đăng xuất ngay và không đăng nhập được). Không tự khóa hay tự bỏ quyền của chính mình; admin trong `.env` chỉ đổi được trong `.env`.
 - **Credit:** bảng giá áp dụng cho thành viên, admin không bị trừ.
   - Tặng một lần cho tài khoản mới (mặc định 100). Tài khoản có từ trước khi có credit cũng được tặng một lần khi nâng cấp.

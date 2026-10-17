@@ -112,10 +112,10 @@ PORT=3000
 ## 6. Deploy và cài đặt lần đầu
 
 1. Deploy theo thứ tự `ai-service` → `backend` → `frontend`. Chờ từng service báo healthy.
-2. Mở tên miền frontend, **đăng ký** tài khoản bằng email trong `ADMIN_EMAILS` (email bạn đặt ở bước 4). Đăng nhập xong sẽ vào thẳng trang `/admin`.
+2. Mở `https://<tên miền frontend>/admin`, bấm **Lần đầu cài đặt? Tạo tài khoản admin** và đăng ký bằng email trong `ADMIN_EMAILS` (email bạn đặt ở bước 4). Người dùng thường không tự đăng ký được; chỉ email admin mới tạo được tài khoản ở bước này.
 3. `/admin` → **API key**: nhập key PoYo, các key Seedvis và key OpenAI. Key được lưu mã hoá trong volume của `ai-service`.
 4. `/admin` → **Credit**: đặt giá từng model, giá kịch bản/ảnh, mức tặng tài khoản mới, ẩn các model không bán.
-5. Đăng ký thử một tài khoản thành viên để kiểm tra số dư, giá model và việc tạo video.
+5. `/admin` → **Người dùng** → **Tạo tài khoản** để cấp tài khoản cho khách (có nút tạo mật khẩu ngẫu nhiên và sao chép thông tin đăng nhập). Biểu tượng chìa khoá ở mỗi dòng dùng để đặt lại mật khẩu. Tạo thử một tài khoản thành viên để kiểm tra số dư, giá model và việc tạo video.
 
 Database trên Railway bắt đầu **trống**. Dữ liệu ở máy local (`backend/storage/mvp.sqlite3`) không tự chuyển lên.
 

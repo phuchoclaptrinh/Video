@@ -1273,6 +1273,12 @@ svg {
 .flow-auth-switch:hover b {
   text-decoration: underline;
 }
+.flow-auth-note {
+  justify-self: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
 
 /* Plan card (shared by storyboard and discussion dialog) */
 .gpt-video-card {

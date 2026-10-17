@@ -88,12 +88,14 @@ export function WorkspaceAuth({
           }}
         >
           <div className="flow-auth-heading">
-            <h1>{admin ? 'Đăng nhập quản trị' : register ? 'Tạo tài khoản' : 'Đăng nhập'}</h1>
+            <h1>
+              {register ? 'Tạo tài khoản quản trị' : admin ? 'Đăng nhập quản trị' : 'Đăng nhập'}
+            </h1>
             <p>
-              {admin
-                ? 'Dành cho quản trị viên VO3 Studio.'
-                : register
-                  ? 'Tạo workspace riêng để lưu dự án và video.'
+              {register
+                ? 'Chỉ dùng cho email quản trị khai báo trong ADMIN_EMAILS.'
+                : admin
+                  ? 'Dành cho quản trị viên VO3 Studio.'
                   : 'Chào mừng trở lại. Tiếp tục với dự án của bạn.'}
             </p>
           </div>
@@ -128,9 +130,10 @@ export function WorkspaceAuth({
           )}
           <button className="flow-button primary" disabled={busy}>
             {busy ? <Loader2 className="spin" size={17} /> : <ArrowRight size={17} />}
-            {register ? 'Tạo tài khoản' : 'Đăng nhập'}
+            <span>{register ? 'Tạo tài khoản' : 'Đăng nhập'}</span>
           </button>
-          {!admin && (
+          {admin ? (
+            // A new install has no accounts yet: the admin listed in ADMIN_EMAILS signs up here once.
             <button
               type="button"
               className="flow-auth-switch"
@@ -139,9 +142,13 @@ export function WorkspaceAuth({
                 setError('');
               }}
             >
-              {register ? 'Đã có tài khoản? ' : 'Chưa có tài khoản? '}
-              <b>{register ? 'Đăng nhập' : 'Đăng ký'}</b>
+              {register ? 'Đã có tài khoản? ' : 'Lần đầu cài đặt? '}
+              <b>{register ? 'Đăng nhập' : 'Tạo tài khoản admin'}</b>
             </button>
+          ) : (
+            <p className="flow-auth-note">
+              Tài khoản do quản trị viên cấp. Chưa có tài khoản? Hãy liên hệ admin.
+            </p>
           )}
         </form>
       </section>

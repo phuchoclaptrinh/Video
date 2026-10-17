@@ -15,6 +15,7 @@ from app.services.platform_shared import (
     delete,
     drafts,
     executions,
+    password_hash,
     select,
     sessions,
     story_batches,
@@ -197,6 +198,19 @@ class PlatformAdminMixin:
             "projects": projects.get(row.id, 0), "videos": videos.get(row.id, 0),
             "last_seen": seen[row.id] - DAY if seen.get(row.id) else None,
         } for row in rows]
+
+    def admin_create_user(self, email: str, password: str) -> dict:
+        with self.engine.begin() as db:
+            uid = self.create_account(db, email.strip().lower(), password)
+        return next(user for user in self.admin_users() if user["id"] == uid)
+
+    def admin_set_password(self, user_id: str, password: str) -> dict:
+        with self.engine.begin() as db:
+            if not db.execute(update(users).where(users.c.id == user_id).values(password=password_hash(password))).rowcount:
+                raise HTTPException(404, "Không tìm thấy người dùng")
+            # Old sessions end, so whoever held the previous password is signed out.
+            db.execute(delete(sessions).where(sessions.c.user_id == user_id))
+        return next(user for user in self.admin_users() if user["id"] == user_id)
 
     def admin_update_user(self, admin: dict, user_id: str, *, is_admin: bool | None, disabled: bool | None) -> dict:
         with self.engine.connect() as db:

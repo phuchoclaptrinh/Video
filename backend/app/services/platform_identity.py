@@ -1,5 +1,6 @@
 """Account sessions, chat history, user memories, and uploaded assets."""
 
+from app.services.platform_admin import admin_emails
 from app.services.platform_shared import (
     HTTPException,
     Image,
@@ -31,20 +32,31 @@ from app.services.platform_shared import (
 
 
 class PlatformIdentityMixin:
+    def create_account(self, db, email: str, password: str) -> str:
+        """Insert an account with the welcome credits; used by admin creation and admin bootstrap."""
+        uid = secrets.token_hex(16)
+        try:
+            db.execute(
+                insert(users).values(
+                    id=uid, email=email, password=password_hash(password), created=time.time(),
+                )
+            )
+        except IntegrityError:
+            raise HTTPException(409, "Email đã được đăng ký") from None
+        self.grant_signup_credits(db, uid)
+        return uid
+
+    def can_self_register(self, email: str) -> bool:
+        """Accounts are created by admins; only a listed admin may sign up, to bootstrap a new install."""
+        configured = admin_emails()
+        return not configured or email.lower() in configured
+
     def login(self, email: str, password: str, register: bool):
+        if register and not self.can_self_register(email):
+            raise HTTPException(403, "Tài khoản do quản trị viên cấp. Hãy liên hệ admin để được tạo tài khoản.")
         with self.engine.begin() as db:
             if register:
-                uid = secrets.token_hex(16)
-                try:
-                    db.execute(
-                        insert(users).values(
-                            id=uid, email=email, password=password_hash(password),
-                            created=time.time(),
-                        )
-                    )
-                    self.grant_signup_credits(db, uid)
-                except IntegrityError:
-                    raise HTTPException(409, "Email đã được đăng ký") from None
+                self.create_account(db, email, password)
             row = db.execute(select(users).where(users.c.email == email)).mappings().first()
             stored = row["password"] if row else password_hash("dummy-password")
             if not row or not hmac.compare_digest(
