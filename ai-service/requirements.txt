@@ -10,6 +10,7 @@ sse-starlette>=2.1,<3.0
 # ---- Config & validation ----
 pydantic>=2.9,<3.0
 pydantic-settings>=2.6,<3.0
+cryptography>=44.0,<51.0            # mã hóa API key provider lưu trong local storage
 
 # ---- Template prompt ----
 jinja2>=3.1,<4.0                   # render app/prompts/video_prompt_template.j2
@@ -30,6 +31,7 @@ google-genai>=1.0,<2.0
 
 # ---- HTTP client & retry ----
 httpx>=0.28,<1.0
+pillow>=11.0,<13.0
 tenacity>=9.0,<10.0                # backoff khi provider trả 429 / 5xx
 
 # ---- Lưu file video tải về ----

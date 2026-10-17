@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+!.env.real.example
+!.env.poyo.example
+!.env.seedvis.example
 *.pem
 *.key
 service-account*.json
@@ -36,6 +39,9 @@ storage/thumbnails/*
 storage/temp/*
 !storage/**/.gitkeep
 *.mp4
+!backend/fixtures/demo.mp4
+backend/storage/
+ai-service/storage/
 *.mov
 *.webm
 
@@ -54,3 +60,8 @@ Thumbs.db
 # ---- Logs ----
 logs/
 *.log
+
+# ---- Local runtime data / test output ----
+storage/*.sqlite3
+*.sqlite3
+coverage.xml

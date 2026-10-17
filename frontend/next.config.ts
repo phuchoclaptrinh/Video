@@ -5,11 +5,19 @@ const nextConfig: NextConfig = {
   output: 'standalone',
 
   reactStrictMode: true,
+  // Keep the dev badge away from the composer's sticky call to action.
+  devIndicators: { position: 'bottom-right' },
   poweredByHeader: false,
   compress: true,
 
   eslint: {
     dirs: ['src'],
+  },
+
+  experimental: {
+    // The /api rewrite otherwise aborts after 30s with a 500, while preparing
+    // per-scene reference images legitimately takes one to three minutes.
+    proxyTimeout: 600_000,
   },
 
   images: {
@@ -37,7 +45,6 @@ const nextConfig: NextConfig = {
   // Khi chạy `npm run dev` ngoài docker, proxy /api về backend để tránh CORS.
   // Trong docker thì nginx đảm nhiệm việc này.
   async rewrites() {
-    if (process.env.NODE_ENV !== 'development') return [];
     return [
       {
         source: '/api/:path*',

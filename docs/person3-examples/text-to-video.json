@@ -1,0 +1,12 @@
+{
+  "spec": {
+    "schema_version": "1.0",
+    "request": {"request_id": "text-demo-1", "user_id": "demo-user", "tenant_id": "demo-tenant"},
+    "intent": {"operation": "TEXT_GENERATION", "goal": "A cinematic city skyline at sunrise"},
+    "output": {"duration_seconds": 5, "aspect_ratio": "16:9", "resolution_preference": "720p"},
+    "story": {"shots": [{"shot_id": "shot-1", "camera": {"movement": "slow dolly forward"}}]}
+  },
+  "assets": [],
+  "preflight_decision": "ALLOW",
+  "policy_decision_id": "demo-policy-1"
+}

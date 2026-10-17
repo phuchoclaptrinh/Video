@@ -1,0 +1,59 @@
+name: vo3-mvp
+services:
+  ai-service:
+    build: ./ai-service
+    environment:
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env}
+      VIDEO_ENABLE_FAKE: ${VIDEO_ENABLE_FAKE:-true}
+      VIDEO_ENABLE_POYO: ${VIDEO_ENABLE_POYO:-false}
+      VIDEO_ENABLE_SEEDVIS: ${VIDEO_ENABLE_SEEDVIS:-false}
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-fake}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-openai}
+      SEEDVIS_API_KEY: ${SEEDVIS_API_KEY:-}
+      SEEDVIS_BASE_URL: ${SEEDVIS_BASE_URL:-https://seedvis.com/api/v1}
+      SEEDVIS_VIDEO_MODEL: ${SEEDVIS_VIDEO_MODEL:-Veo-3.1}
+      SEEDVIS_IMAGE_MODEL: ${SEEDVIS_IMAGE_MODEL:-gpt-image-2}
+      SEEDANCE_API_KEY: ${SEEDANCE_API_KEY:-}
+      SEEDANCE_BASE_URL: ${SEEDANCE_BASE_URL:-https://ark.ap-southeast.bytepluses.com/api/v3}
+      SEEDANCE_MODEL: ${SEEDANCE_MODEL:-seedance-1-5-pro-251215}
+      POYO_API_KEY: ${POYO_API_KEY:-}
+      POYO_BASE_URL: ${POYO_BASE_URL:-https://api.poyo.ai}
+      POYO_MODEL: ${POYO_MODEL:-veo3.1-fast}
+      OPENAI_PLANNER_MODEL: ${OPENAI_PLANNER_MODEL:-gpt-4o-mini}
+      VOICE_PACE: ${VOICE_PACE:-podcast}
+      VIDEO_FAKE_DB: /app/storage/fake.sqlite3
+      PROVIDER_CREDENTIAL_PATH: /app/storage/provider-credentials.json.enc
+      WEB_CONCURRENCY: "1"
+    volumes: ["ai_data:/app/storage"]
+  backend:
+    build: ./backend
+    environment:
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env}
+      AI_SERVICE_URL: http://ai-service:8001
+      VOICE_PACE: ${VOICE_PACE:-podcast}
+      VIDEO_EXECUTION_DATABASE_URL: sqlite:////app/storage/mvp.sqlite3
+      STORAGE_LOCAL_PATH: /app/storage
+      LOCAL_VIDEO_WORKER: "true"
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-fake}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-openai}
+      SEEDVIS_VIDEO_MODEL: ${SEEDVIS_VIDEO_MODEL:-Veo-3.1}
+      SEEDVIS_IMAGE_MODEL: ${SEEDVIS_IMAGE_MODEL:-gpt-image-2}
+      ENABLE_PAID_GENERATION: ${ENABLE_PAID_GENERATION:-false}
+      VIDEO_OUTPUT_ALLOWED_HOST_SUFFIXES: ${VIDEO_OUTPUT_ALLOWED_HOST_SUFFIXES:-.bytepluses.com,.byteplus.com,.volces.com,.poyo.ai,.seedvis.com}
+      VIDEO_OUTPUT_MAX_BYTES: ${VIDEO_OUTPUT_MAX_BYTES:-524288000}
+      WEB_CONCURRENCY: "1"
+      APP_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes: ["platform_data:/app/storage"]
+    depends_on:
+      ai-service: {condition: service_healthy}
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://backend:8000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      backend: {condition: service_healthy}
+volumes:
+  ai_data:
+  platform_data:
