@@ -77,6 +77,7 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const autoGroundAttempted = useRef(new Set<string>());
+  const refreshedFailures = useRef(new Set<string>());
   const activeIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -339,6 +340,42 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
       );
     }, 4000);
     return () => window.clearInterval(timer);
+  }, [messages]);
+
+  // A finished job is stored in the chat message and no longer polled, so a failed render keeps
+  // the retry options computed when it failed. Ask the server once per session for the current
+  // state, so fixes such as an added API key or newly retryable errors show a retry button.
+  useEffect(() => {
+    const stale = messages.flatMap((message) => {
+      const event = videoEvent(message);
+      return event?.job &&
+        ['FAILED', 'NEEDS_USER_ACTION'].includes(event.job.status) &&
+        !refreshedFailures.current.has(message.id)
+        ? [{ message, event }]
+        : [];
+    });
+    for (const { message, event } of stale) {
+      refreshedFailures.current.add(message.id);
+      void request<ChatMessage>(`/chat/video-events/${message.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ job_id: event.job!.id }),
+      })
+        .then((updated) => {
+          const job = videoEvent(updated)?.job;
+          if (!job) return;
+          setMessages((current) =>
+            current.map((item) => {
+              const currentEvent = item.id === message.id ? videoEvent(item) : null;
+              return currentEvent
+                ? { ...item, content: JSON.stringify({ ...currentEvent, job }) }
+                : item;
+            }),
+          );
+        })
+        .catch(() => {
+          /* Keep the stored status; the card still shows its last known error. */
+        });
+    }
   }, [messages]);
 
   function newChat() {

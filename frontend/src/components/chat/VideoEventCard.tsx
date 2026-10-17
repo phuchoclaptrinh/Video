@@ -440,7 +440,7 @@ export function VideoEventCard({
                 checked={confirmPaid}
                 onChange={(e) => setConfirmPaid(e.target.checked)}
               />
-              Tôi đồng ý thử lại và có thể phát sinh phí API
+              Tôi đồng ý thử lại (có thể trừ credit)
             </label>
           )}
           <button
