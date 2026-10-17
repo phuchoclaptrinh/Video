@@ -279,6 +279,13 @@ export function WorkspaceComposer({
       {w.composeMode === 'video' && w.creationScope === 'single' && (
         <StyleReferencePicker workspace={w} disabled={busy} />
       )}
+      {video && config.planner !== 'openai' && (
+        <p className="workflow-model-caption" role="note">
+          {admin
+            ? 'Chưa có key OpenAI nên chỉ tạo được clip trực tiếp, chưa lập được kịch bản. Nhập key trong Admin › API key.'
+            : 'Lập kịch bản AI đang tạm ngưng, hiện chỉ tạo được clip trực tiếp.'}
+        </p>
+      )}
       {video && !canPlan && config.planner === 'openai' && config.provider !== 'fake' && (
         <p className="workflow-model-caption" role="note">
           {config.duration_control === false
@@ -470,9 +477,11 @@ export function WorkspaceComposer({
             ? phases[w.planningPhase]
             : !video
               ? 'Gửi tin nhắn'
-              : campaign
-                ? 'Lập chiến dịch'
-                : 'Lập kịch bản'}
+              : w.composeMode === 'clip'
+                ? 'Tạo bản nháp clip'
+                : campaign
+                  ? 'Lập chiến dịch'
+                  : 'Lập kịch bản'}
           {!busy && <ArrowRight size={17} />}
         </button>
       </div>
