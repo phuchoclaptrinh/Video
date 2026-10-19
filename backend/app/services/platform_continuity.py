@@ -160,7 +160,7 @@ class PlatformContinuityMixin:
             )
         if not video:
             raise RuntimeError("Completed clip is missing from storage")
-        source = self.storage / "videos" / video["filename"]
+        source = self._video_file(video["filename"])
         target_dir = self.storage / "continuity"
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{generation_id}.jpg"
@@ -239,7 +239,7 @@ class PlatformContinuityMixin:
             ).mappings().first()
         if not video:
             raise RuntimeError("Completed clip is missing from storage")
-        source = self.storage / "videos" / video["filename"]
+        source = self._video_file(video["filename"])
         directory = self.storage / "continuity"
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / f"frame-{generation_id}-{edge}.jpg"

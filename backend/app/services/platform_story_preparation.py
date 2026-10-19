@@ -246,7 +246,7 @@ class PlatformStoryPreparationMixin:
                 videos.c.generation_id == generation_id, videos.c.user_id == batch["user_id"],
             )).scalar_one_or_none()
         if not filename or not self._review_native_scene_audio(
-            draft, scene_index, generation_id, self.storage / "videos" / filename
+            draft, scene_index, generation_id, self._video_file(filename)
         ):
             return
         self._record_scene_continuity(draft, scene_index, continuity_status="VALIDATING", continuity_error=None)

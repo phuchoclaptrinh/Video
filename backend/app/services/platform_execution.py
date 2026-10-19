@@ -96,7 +96,7 @@ class PlatformExecutionMixin:
         if row is None:
             raise HTTPException(503, "Video chưa được lưu vào storage")
         path = self.storage / "videos" / row["filename"]
-        if not path.is_file():
+        if not self._video_available(row["filename"]):
             raise HTTPException(503, "Không tìm thấy file video trong storage")
         return path
 
@@ -113,7 +113,7 @@ class PlatformExecutionMixin:
                     .first()
                 )
             if stored:
-                stored_path = self.storage / "videos" / stored["filename"]
+                stored_path = self._video_file(stored["filename"])
                 if (
                     stored_path.is_file()
                     and stored_path.stat().st_size == stored["size_bytes"]

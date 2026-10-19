@@ -124,6 +124,17 @@ Database trên Railway bắt đầu **trống**. Dữ liệu ở máy local (`ba
 
 - **Database:** `/admin` → **Tổng quan** → **Tải bản sao lưu**. File `.sqlite3` tải về là bản chụp nhất quán (tài khoản, credit, lịch sử giao dịch, dự án, chiến dịch), lấy được cả khi app đang chạy. Nên tải định kỳ, ví dụ mỗi ngày.
 - **Ảnh/video:** nằm trong volume `backend`. Nếu gói Railway có tính năng backup volume thì bật lịch backup cho volume này.
+- **Video trên Cloudflare R2 (tuỳ chọn):** đặt thêm cho `backend`:
+
+  ```
+  R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+  R2_BUCKET=vo3-backup
+  R2_ACCESS_KEY_ID=<access key>
+  R2_SECRET_ACCESS_KEY=<secret key>
+  R2_PREFIX=storage
+  ```
+
+  Mỗi 5 phút backend đẩy video trong `storage/videos` lên `<bucket>/<R2_PREFIX>/videos/`. Bản trên volume được xoá sau `R2_KEEP_LOCAL_HOURS` giờ không dùng (mặc định 24), hoặc sớm hơn khi volume còn dưới 20% trống. Web vẫn xem và tải được: file không còn trên volume thì trình duyệt được chuyển sang link R2 có hạn 1 giờ. Khi cần ghép hay làm lại cảnh, backend tự tải clip về. Ảnh người dùng tải lên (`storage/*.jpg`) và file `continuity/` cũng được sao lưu lên R2 theo cùng chu kỳ nhưng vẫn giữ trên volume; database vẫn chỉ ở volume.
 - **Server riêng (VPS):** dùng `scripts/backup_sqlite.py`, có thể chạy theo cron:
 
   ```

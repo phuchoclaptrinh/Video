@@ -10,11 +10,12 @@ import httpx
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi import Path as PathParam
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from sqlalchemy import delete
 
+from app.services.object_storage import ObjectStorage
 from app.services.platform import Platform, assets, sessions
 from app.services.platform_style_learning import MAX_REFERENCE_BYTES
 from app.services.video_execution_client import ExecutionError
@@ -167,6 +168,7 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
                 provider=os.getenv("VIDEO_PROVIDER", "fake").lower(),
                 paid_enabled=os.getenv("ENABLE_PAID_GENERATION", "false").lower() == "true",
                 public_base_url=os.getenv("PUBLIC_BASE_URL"),
+                object_storage=ObjectStorage.from_env(),
             )
         app.state.platform = current
         if run_worker and os.getenv("LOCAL_VIDEO_WORKER", "true") == "true":
@@ -175,6 +177,12 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
         current.close()
 
     app = FastAPI(title="VO3 Studio API", lifespan=lifespan)
+
+    def video_file(path: Path, filename: str | None):
+        if path.is_file():
+            return FileResponse(path, media_type="video/mp4", filename=filename)
+        # Moved off the volume: the browser plays or downloads it straight from object storage.
+        return RedirectResponse(app.state.platform.media_url(path, "video/mp4", filename), status_code=307)
     attempts = defaultdict(deque)
 
     @app.middleware("http")
@@ -595,16 +603,12 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
         if job["status"] != "COMPLETED":
             raise HTTPException(409, "Video chưa hoàn thành")
         fixture = app.state.platform.video_path(user["id"], gid)
-        return FileResponse(
-            fixture, media_type="video/mp4", filename="vo3-video.mp4" if download else None
-        )
+        return video_file(fixture, "vo3-video.mp4" if download else None)
 
     @app.get("/api/v1/story-batches/{bid}/video")
     def story_video(bid: str, download: bool = False, user=Depends(current)):
         path = app.state.platform.story_batch_video_path(user["id"], bid)
-        return FileResponse(
-            path, media_type="video/mp4", filename="video-hoan-chinh.mp4" if download else None
-        )
+        return video_file(path, "video-hoan-chinh.mp4" if download else None)
 
     @app.post("/api/v1/story-batches/{bid}/merge")
     def retry_story_merge(bid: str, user=Depends(current)):

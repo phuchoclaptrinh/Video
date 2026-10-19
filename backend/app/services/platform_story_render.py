@@ -342,11 +342,11 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
                         videos.c.generation_id == generation_ids[-1], videos.c.user_id == row["user_id"],
                     )).scalar_one_or_none()
                 if native_audio and (
-                    not clip_video or not self._validate_story_video(self.storage / "videos" / clip_video)
+                    not clip_video or not self._validate_story_video(self._video_file(clip_video))
                 ):
                     raise HTTPException(422, "native_audio_missing: scene video has no decodable audio")
                 if native_audio and not self._review_native_scene_audio(
-                    draft, scene_index, generation_ids[-1], self.storage / "videos" / clip_video,
+                    draft, scene_index, generation_ids[-1], self._video_file(clip_video),
                 ):
                     raise HTTPException(422, self._native_speech_failure(draft, scene_index))
                 anchor = self.storage / "continuity" / f"anchor-{row['draft_id']}.jpg"
@@ -462,7 +462,7 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
                         videos.c.user_id == row["user_id"],
                     )
                 ).scalar_one_or_none()
-            if not clip_video or not self._validate_story_video(self.storage / "videos" / clip_video):
+            if not clip_video or not self._validate_story_video(self._video_file(clip_video)):
                 self._record_scene_continuity(
                     draft, len(generation_ids), continuity_status="FAILED", continuity_error="native_audio_missing",
                 )
@@ -471,7 +471,7 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
                                .values(status="FAILED", error_code="native_audio_missing"))
                 return
             if not self._review_native_scene_audio(
-                draft, len(generation_ids), generation_ids[-1], self.storage / "videos" / clip_video
+                draft, len(generation_ids), generation_ids[-1], self._video_file(clip_video)
             ):
                 failure = self._native_speech_failure(draft, len(generation_ids))
                 self._record_scene_continuity(
@@ -612,7 +612,7 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
         by_id = {row["generation_id"]: row for row in rows}
         if len(by_id) != len(generation_ids) or not generation_ids:
             raise RuntimeError("A story clip has no persisted video")
-        paths = [self.storage / "videos" / by_id[gid]["filename"] for gid in generation_ids]
+        paths = [self._video_file(by_id[gid]["filename"]) for gid in generation_ids]
         if any(not path.is_file() for path in paths):
             raise RuntimeError("A story clip file is missing")
         width, height = (1280, 720) if ratio == "16:9" else (720, 1280)
@@ -793,6 +793,6 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
         if row["status"] != "COMPLETED" or not row["filename"]:
             raise HTTPException(409, "Video hoàn chỉnh chưa sẵn sàng")
         path = self.storage / "videos" / row["filename"]
-        if not path.is_file():
+        if not self._video_available(row["filename"]):
             raise HTTPException(503, "Không tìm thấy video đã ghép trong storage")
         return path

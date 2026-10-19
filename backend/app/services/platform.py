@@ -9,6 +9,7 @@ from app.services.platform_execution import PlatformExecutionMixin
 from app.services.platform_generation import PlatformGenerationMixin
 from app.services.platform_identity import PlatformIdentityMixin
 from app.services.platform_keyframes import PlatformKeyframesMixin
+from app.services.platform_media_storage import PlatformMediaStorageMixin
 from app.services.platform_planning import PlatformPlanningMixin
 from app.services.platform_projects import PlatformProjectsMixin
 from app.services.platform_providers import PlatformProvidersMixin
@@ -29,6 +30,7 @@ class Platform(
     PlatformProvidersMixin,
     PlatformSceneContinuityMixin,
     PlatformExecutionMixin,
+    PlatformMediaStorageMixin,
     PlatformStoryRenderMixin,
     PlatformStoryPreparationMixin,
     PlatformProjectsMixin,
@@ -48,6 +50,7 @@ class Platform(
         provider: str = "fake",
         paid_enabled: bool = False,
         public_base_url: str | None = None,
+        object_storage=None,
     ):
         if provider not in {"fake", "seedance", "poyo", "seedvis"}:
             raise RuntimeError("VIDEO_PROVIDER must be fake, seedance, poyo or seedvis")
@@ -55,6 +58,7 @@ class Platform(
             raise RuntimeError("Paid providers require ENABLE_PAID_GENERATION=true")
         storage.mkdir(parents=True, exist_ok=True)
         self.storage = storage
+        self.objects = object_storage
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.signing_key = key.encode()
         self.provider = provider
@@ -110,12 +114,16 @@ class Platform(
         self.campaign_lock = threading.Lock()
         self.thread = None
         self.campaign_thread = None
+        self.media_thread = None
 
     def start(self):
         self.thread = threading.Thread(target=self.work, daemon=True)
         self.thread.start()
         self.campaign_thread = threading.Thread(target=self.campaign_work, daemon=True)
         self.campaign_thread.start()
+        if self.objects:
+            self.media_thread = threading.Thread(target=self.media_work, daemon=True)
+            self.media_thread.start()
 
     def close(self):
         self.stop.set()
@@ -123,6 +131,8 @@ class Platform(
             self.thread.join(timeout=155)
         if self.campaign_thread:
             self.campaign_thread.join(timeout=155)
+        if self.media_thread:
+            self.media_thread.join(timeout=155)
         self.http.close()
         self.engine.dispose()
 

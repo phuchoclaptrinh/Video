@@ -68,7 +68,7 @@ class PlatformSceneContinuityMixin:
             video = db.execute(select(videos).where(
                 videos.c.generation_id == generation_id, videos.c.user_id == uid,
             )).mappings().first()
-        if not video or not (self.storage / "videos" / video["filename"]).is_file():
+        if not video or not self._video_available(video["filename"]):
             raise HTTPException(409, "continuity_parent_video_missing")
         outputs = (job.get("result") or {}).get("outputs") or []
         source = next((item.get("source_url") for item in outputs if item.get("source_url")), None)
