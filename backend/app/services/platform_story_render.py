@@ -25,6 +25,7 @@ from app.services.platform_shared import (
     insert,
     json,
     logger,
+    os,
     secrets,
     select,
     shutil,
@@ -615,7 +616,11 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
         if any(not path.is_file() for path in paths):
             raise RuntimeError("A story clip file is missing")
         width, height = (1280, 720) if ratio == "16:9" else (720, 1280)
-        inputs = [value for path in paths for value in ("-i", str(path))]
+        # FFmpeg sizes its thread pools from the host's CPU count, which in a container can be dozens
+        # of cores; decoding every clip and encoding at once then exceeds a small memory limit and the
+        # process is killed. A fixed small pool keeps the merge within a few hundred MB.
+        threads = str(max(1, int(os.getenv("MERGE_FFMPEG_THREADS", "2"))))
+        inputs = [value for path in paths for value in ("-threads", threads, "-i", str(path))]
         narration_path = self.storage / "continuity" / f"story-{batch_id}.mp3"
         has_narration = audio_mode == "narration" and narration_path.is_file()
         if audio_mode == "native" and any(not self._validate_story_video(path) for path in paths):
@@ -648,7 +653,7 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
             if narration_duration <= 0 or narration_duration > sum(self._media_duration(path) for path in paths) + 0.5:
                 raise RuntimeError("Narration duration does not fit the assembled video")
         if has_narration:
-            inputs.extend(("-i", str(narration_path)))
+            inputs.extend(("-threads", threads, "-i", str(narration_path)))
         native_metrics = [self._native_audio_measurements(path) for path in paths] if audio_mode == "native" else []
         durations = [self._media_duration(path) for path in paths] if audio_mode == "native" else []
         windows = [native_trim_window(duration, measured) for duration, measured in zip(durations, native_metrics, strict=True)]
@@ -721,6 +726,8 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
             imageio_ffmpeg.get_ffmpeg_exe(),
             "-y",
             *inputs,
+            "-filter_complex_threads",
+            threads,
             "-filter_complex",
             ";".join(filters),
             "-map",
@@ -729,6 +736,8 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
             "[outa]",
             "-c:v",
             "libx264",
+            "-threads",
+            threads,
             "-r",
             "24",
             "-preset",
@@ -746,7 +755,9 @@ class PlatformStoryRenderMixin(PlatformNativeAudioMixin):
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=600)
             if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size < 12:
-                logger.error("Story merge FFmpeg failed for %s: %s", batch_id, result.stderr[-2000:])
+                # A negative return code (e.g. -9) means the process was killed, usually out of memory.
+                logger.error("Story merge FFmpeg failed for %s (exit %s): %s",
+                             batch_id, result.returncode, result.stderr[-2000:])
                 raise RuntimeError("FFmpeg could not merge the story clips")
             if not self._validate_story_video(temporary):
                 raise RuntimeError("FFmpeg output failed full audio/video decoding")
