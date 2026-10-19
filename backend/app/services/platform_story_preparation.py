@@ -258,7 +258,13 @@ class PlatformStoryPreparationMixin:
     @staticmethod
     def _is_unbilled_scene_failure(job: dict) -> bool:
         if job.get("provider") == "seedvis":
-            return job.get("status") == "FAILED" and job.get("error_code") == "seedvis_not_started"
+            # Seedvis refunds a rejected task (e.g. its safety filter) and says so in the message.
+            detail = str((job.get("result") or {}).get("error_detail") or "").lower()
+            return job.get("status") == "FAILED" and (
+                job.get("error_code") == "seedvis_not_started"
+                or "hoàn lại" in detail
+                or "refund" in detail
+            )
         return PlatformStoryPreparationMixin._is_unbilled_poyo_failure(job)
 
     @staticmethod

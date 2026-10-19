@@ -94,7 +94,10 @@ export function VideoEventCard({
       : undefined;
   const likenessRejected = /prominent person|protected likeness|celebrity/i.test(job?.error || '');
   const providerRejected =
-    likenessRejected || /content does not comply|platform regulations/i.test(job?.error || '');
+    likenessRejected ||
+    /content does not comply|platform regulations|bộ lọc an toàn|safety filter/i.test(
+      job?.error || '',
+    );
   const speechRejected =
     job?.error?.startsWith('native_speech_quality_failed') ||
     job?.error?.startsWith('native_audio_missing') ||

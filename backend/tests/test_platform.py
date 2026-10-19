@@ -2920,3 +2920,17 @@ def test_story_failing_before_any_scene_can_retry_once_the_key_is_added(client, 
     retried = client.post(f"/api/v1/plans/{draft['id']}/generate", json={"confirm_paid": True})
     assert retried.status_code == 202
     assert client.get(f"/api/v1/generations/{batch['id']}").json()["status"] != "FAILED"
+
+
+def test_seedvis_refunded_rejection_counts_as_unbilled_and_retryable():
+    from app.services.platform_story_preparation import PlatformStoryPreparationMixin as Prep
+
+    rejected = {"provider": "seedvis", "status": "FAILED", "error_code": "seedvis_generation_failed",
+                "result": {"error_detail": "Prompt hoặc tham chiếu bị bộ lọc an toàn từ chối. "
+                                           "Credit của bạn đã được hoàn lại."}}
+    assert Prep._is_unbilled_scene_failure(rejected)
+    assert Prep._is_unbilled_scene_failure(rejected | {"result": {"error_detail": "Task refunded"}})
+    # A failure Seedvis kept billing for still needs a new plan or explicit consent elsewhere.
+    assert not Prep._is_unbilled_scene_failure(rejected | {"result": {"error_detail": "Render timed out"}})
+    assert not Prep._is_unbilled_scene_failure(rejected | {"status": "COMPLETED"})
+    assert Prep._is_unbilled_scene_failure({"provider": "seedvis", "status": "FAILED", "error_code": "seedvis_not_started"})
