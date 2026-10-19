@@ -104,6 +104,14 @@ Admin là email trong `ADMIN_EMAILS` của `.env` (phân cách bằng dấu ph�
   - Ô "Hiện" cạnh mỗi model: bỏ chọn để ẩn model khỏi người dùng (server cũng chặn); admin vẫn dùng được.
   - Mỗi lần lập kịch bản (kể cả từng kịch bản trong chiến dịch), mỗi lần lập chiến lược chiến dịch và mỗi ảnh anchor/keyframe tính một mức cố định.
 
+### Tự thử lại khi lỗi
+
+- Video lỗi theo cách hệ thống làm lại được thì worker tự tạo lại, không hỏi người dùng: lỗi ở bước chuẩn bị (chưa gửi cảnh nào), cảnh bị nhà cung cấp từ chối nhưng không tính tiền (Seedvis báo đã hoàn credit, PoYo 0 credit), cảnh không đạt kiểm tra chất lượng, và lỗi ghép video.
+- Tối đa 3 lần, nghỉ 30 giây, 2 phút rồi 5 phút giữa các lần (`platform_auto_retry.py`). Trong lúc chờ, video hiện "Đang tự thử lại (lần n/3)" và giao diện tiếp tục cập nhật.
+- Lỗi mà nhà cung cấp đã tính tiền nhưng không ra video thì không tự tạo lại, vì sẽ tốn tiền lần nữa.
+- Video lỗi từ trước khi có tính năng này được đánh dấu đã dùng hết lượt, nên không tự chạy lại.
+- Người dùng chỉ thấy câu thông báo dễ hiểu (`error`). Admin thấy mã lỗi và câu gốc của nhà cung cấp (`error_code`), cả trong Studio lẫn Admin › Video & hàng đợi (kèm số lần đã tự thử lại).
+
 ### Cách trừ credit
 
 - **Render:** trước khi bắt đầu một video, server kiểm tra số dư đủ cho toàn bộ (giá clip của từng cảnh + một ảnh mỗi cảnh). Mỗi cảnh bị trừ khi gửi sang provider. Worker tự hoàn nếu cảnh kết thúc `FAILED`/`CANCELLED` mà không ra video; cảnh đã ra video thì không hoàn, kể cả khi tạo lại vì lỗi chất lượng.

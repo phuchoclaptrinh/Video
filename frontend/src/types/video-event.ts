@@ -55,6 +55,11 @@ export type VideoJob = {
   requested_voice_mode?: 'native_veo' | 'consistent_voice';
   voice_mode_limitations?: string[];
   retryable?: boolean;
+  /** Technical error (code and provider message); only sent to admins. */
+  error_code?: string | null;
+  error_kind?: 'credits' | 'merge' | 'rejected' | 'quality' | 'system' | null;
+  /** A failed render the worker will start again by itself. */
+  auto_retry?: { attempts: number; limit: number; pending: boolean } | null;
   clip_progress?: { completed: number; total: number } | null;
 };
 export type QualityReport = {
@@ -75,6 +80,15 @@ export type VideoEvent = {
   job: VideoJob | null;
   quality_reports?: QualityReport[];
 };
+
+const TERMINAL = ['COMPLETED', 'FAILED', 'CANCELLED', 'NEEDS_USER_ACTION'];
+
+/** Still in progress: running, or failed with an automatic retry scheduled. */
+export function jobActive(
+  job?: { status: string; auto_retry?: { pending: boolean } | null } | null,
+) {
+  return Boolean(job) && (!TERMINAL.includes(job!.status) || Boolean(job!.auto_retry?.pending));
+}
 
 export function videoEvent(message: ChatMessage): VideoEvent | null {
   if (message.role !== 'assistant') return null;

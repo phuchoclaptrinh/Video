@@ -137,6 +137,9 @@ story_batches = Table(
     Column("size_bytes", Integer),
     Column("error_code", String),
     Column("created", Float, nullable=False),
+    # Automatic retries already used, and when the next one is due (None: not scheduled).
+    Column("auto_retries", Integer, nullable=False, server_default="0"),
+    Column("retry_after", Float),
 )
 conversations = Table(
     "platform_conversations",

@@ -13,7 +13,7 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
-import type { ChatMessage, VideoEvent } from '@/types/video-event';
+import { jobActive, type ChatMessage, type VideoEvent } from '@/types/video-event';
 import type { LibraryVideo } from '@/types/workspace';
 import { WorkspaceDialog } from './WorkspaceDialog';
 
@@ -29,6 +29,9 @@ export const jobLabels: Record<string, string> = {
   NEEDS_USER_ACTION: 'Cần kiểm tra',
 };
 export const terminal = ['COMPLETED', 'FAILED', 'CANCELLED', 'NEEDS_USER_ACTION'];
+export { jobActive };
+export const jobLabel = (job: { status: string; auto_retry?: { pending: boolean } | null }) =>
+  job.auto_retry?.pending ? 'Đang tự thử lại' : jobLabels[job.status] || job.status;
 export type VideoEntry = { message: ChatMessage; event: VideoEvent };
 type Asset = {
   id: string;

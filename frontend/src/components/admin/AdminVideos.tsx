@@ -17,6 +17,9 @@ type AdminVideo = {
   scenes_total: number;
   scene_status: string | null;
   credential: string | null;
+  /** The provider's own message for the failed scene. */
+  error_detail: string | null;
+  auto_retries: number;
 };
 type QueueItem = {
   id: string;
@@ -120,6 +123,17 @@ export function AdminVideos() {
                 <td className="admin-title" title={video.title}>
                   {video.title}
                   {video.error && <small title={video.error}>{errorLabel(video.error)}</small>}
+                  {video.error && video.error !== errorLabel(video.error) && (
+                    <small className="admin-error-detail">{video.error}</small>
+                  )}
+                  {video.error_detail && (
+                    <small className="admin-error-detail">Nhà cung cấp: {video.error_detail}</small>
+                  )}
+                  {video.auto_retries > 0 && (
+                    <small className="admin-error-detail">
+                      Đã tự thử lại {video.auto_retries} lần
+                    </small>
+                  )}
                 </td>
                 <td>{video.user}</td>
                 <td>

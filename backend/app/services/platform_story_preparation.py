@@ -25,6 +25,7 @@ from app.services.platform_shared import (
     video_scenes,
     videos,
 )
+from app.services.platform_auto_retry import AUTO_RETRY_LIMIT, member_error_message, story_error_kind
 from app.services.video_continuity import is_scene_quality_error, voice_instruction
 from app.services.voice_pipeline import (
     choose_voice_mode,
@@ -705,6 +706,12 @@ class PlatformStoryPreparationMixin:
             root_payload = db.execute(select(drafts.c.payload).where(drafts.c.id == row.get("draft_id"))).scalar_one_or_none() or {}
         planned_clips = root_payload.get("story_plan", {}).get("clips", [])
         duration = sum(clip.get("duration_seconds", 8) for clip in planned_clips) if planned_clips else clip_count * 8
+        retryable = status == "FAILED" and (preparation_error or retryable_provider_failure or retryable_bad_scene)
+        attempts = row.get("auto_retries") or 0
+        retry_pending = bool(self.story_retry_kind(row, retryable)) and attempts < AUTO_RETRY_LIMIT
+        error_kind = story_error_kind(error) if status == "FAILED" else None
+        # Admins see codes and provider messages; members get a plain notice.
+        technical = self.credit_exempt(row["user_id"])
         if status == "COMPLETED" and row.get("filename"):
             measured_duration = self._media_duration(self.storage / "videos" / row["filename"])
             if measured_duration > 0:
@@ -720,7 +727,12 @@ class PlatformStoryPreparationMixin:
             "demo": False,
             "provider": root_payload.get("render_target", {}).get("provider", jobs[0]["provider"] if jobs else self.provider),
             "model": root_payload.get("render_target", {}).get("video_model"),
-            "error": error,
+            "error": error if technical else member_error_message(
+                error_kind, pending=retry_pending, attempts=attempts, error=error,
+            ),
+            "error_code": error if technical else None,
+            "error_kind": error_kind,
+            "auto_retry": {"attempts": attempts, "limit": AUTO_RETRY_LIMIT, "pending": retry_pending},
             "cancel_requested": False,
             "video_url": f"/api/v1/story-batches/{row['id']}/video"
             if status == "COMPLETED"
@@ -729,7 +741,7 @@ class PlatformStoryPreparationMixin:
             "audio_mode": row["audio_mode"],
             **root_payload.get("voice_policy", {}),
             "clip_progress": {"completed": complete, "total": clip_count},
-            "retryable": status == "FAILED" and (preparation_error or retryable_provider_failure or retryable_bad_scene),
+            "retryable": retryable,
         }
 
     def _story_clip_count(self, draft_id: str | None) -> int:

@@ -15,7 +15,7 @@ import {
 import { VideoEventCard } from '@/components/chat/VideoEventCard';
 import { useImagePreview } from '@/hooks/use-image-preview';
 import type { VideoWorkspaceController } from '@/hooks/use-video-workspace';
-import { jobLabels, terminal, type VideoEntry } from './AssetCanvas';
+import { jobActive, jobLabel, type VideoEntry } from './AssetCanvas';
 
 export type WorkflowStep = 'brief' | 'plan' | 'result';
 export const workflowSteps: { id: WorkflowStep; label: string }[] = [
@@ -42,10 +42,13 @@ export function WorkflowStage({
     event?.project_current_draft_id && event.project_current_draft_id !== event.plan.id,
   );
   const complete = job?.status === 'COMPLETED' && Boolean(job.video_url);
-  const pending = job && !terminal.includes(job.status);
+  const pending = jobActive(job);
   // Every scene finished; only joining them failed, which can be retried without new renders.
   const mergeFailed = Boolean(
-    job?.story_batch && job.status === 'FAILED' && job.error?.startsWith('story_merge_failed'),
+    job?.story_batch &&
+    job.status === 'FAILED' &&
+    !job.auto_retry?.pending &&
+    job.error_kind === 'merge',
   );
   if (step === 'plan' && selected)
     return (
@@ -136,7 +139,7 @@ export function WorkflowStage({
                   {w.renderingId
                     ? 'Đang gửi yêu cầu tạo video'
                     : job
-                      ? jobLabels[job.status] || job.status
+                      ? jobLabel(job)
                       : 'Kịch bản chưa được duyệt'}
                 </strong>
                 {job?.clip_progress && (
@@ -182,9 +185,11 @@ export function WorkflowStage({
         </ol>
         {job?.error && (
           <p className="flow-inline-error" role="alert">
-            {mergeFailed
-              ? 'Các cảnh đã tạo xong nhưng bước ghép thành video bị lỗi. Bấm "Ghép lại video" để thử lại; các cảnh không bị tạo lại nên không trừ thêm credit.'
-              : job.error}
+            {mergeFailed && job.error_code
+              ? `${job.error_code} · Bấm "Ghép lại video" để thử lại; các cảnh không bị tạo lại nên không trừ thêm credit.`
+              : mergeFailed
+                ? 'Các cảnh đã tạo xong nhưng bước ghép thành video bị lỗi. Bấm "Ghép lại video" để thử lại; không trừ thêm credit.'
+                : job.error}
           </p>
         )}
         {mergeFailed ? (

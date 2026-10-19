@@ -1,6 +1,7 @@
 """Application platform facade preserving the existing public import path."""
 
 from app.services.platform_admin import PlatformAdminMixin
+from app.services.platform_auto_retry import AUTO_RETRY_LIMIT, PlatformAutoRetryMixin
 from app.services.platform_campaigns import PlatformCampaignsMixin
 from app.services.platform_continuity import PlatformContinuityMixin
 from app.services.platform_credits import PlatformCreditsMixin
@@ -21,6 +22,7 @@ from app.services.platform_style_learning import PlatformStyleLearningMixin
 
 class Platform(
     PlatformAdminMixin,
+    PlatformAutoRetryMixin,
     PlatformCreditsMixin,
     PlatformCampaignsMixin,
     PlatformSeedvisKeysMixin,
@@ -72,6 +74,15 @@ class Platform(
                     "ALTER TABLE platform_story_batches ADD COLUMN audio_mode VARCHAR "
                     "NOT NULL DEFAULT 'narration'"
                 ))
+        if "auto_retries" not in batch_columns:
+            with self.engine.begin() as db:
+                db.execute(text(
+                    "ALTER TABLE platform_story_batches ADD COLUMN auto_retries INTEGER NOT NULL DEFAULT 0"
+                ))
+                db.execute(text("ALTER TABLE platform_story_batches ADD COLUMN retry_after FLOAT"))
+                # Renders that failed before automatic retries existed are not started again on their own.
+                db.execute(text("UPDATE platform_story_batches SET auto_retries = :limit"),
+                           {"limit": AUTO_RETRY_LIMIT})
         scene_columns = {
             column["name"] for column in sqlalchemy_inspect(self.engine).get_columns("platform_video_scenes")
         }
@@ -142,6 +153,7 @@ class Platform(
                 for job in pending:
                     self.finalize(dict(job))
                 self.process_story_batches()
+                self.auto_retry_failed_stories()
                 self.settle_render_credits()
             except Exception:
                 logging.getLogger(__name__).exception("Local worker failed; journal retained")

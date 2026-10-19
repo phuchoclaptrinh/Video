@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { Check, CircleAlert, Layers, Loader2 } from 'lucide-react';
 import { request } from '@/lib/chat-api';
-import { jobLabels, terminal, type VideoEntry } from './AssetCanvas';
+import { jobActive, jobLabel, type VideoEntry } from './AssetCanvas';
 
 type Capacity = { keys: number; total_slots: number; active: number; waiting: number };
 
@@ -23,7 +23,7 @@ export function ProductionBoard({
   onSelect: (id: string) => void;
 }) {
   const rendered = entries.filter((entry) => entry.event.job).reverse();
-  const running = rendered.filter((entry) => !terminal.includes(entry.event.job!.status)).length;
+  const running = rendered.filter((entry) => jobActive(entry.event.job)).length;
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   useEffect(() => {
     if (!seedvis) return;
@@ -110,7 +110,7 @@ export function ProductionBoard({
                 />
               </span>
               <small>
-                {jobLabels[job.status] || job.status}
+                {jobLabel(job)}
                 {progress ? ` · ${progress.completed}/${progress.total} cảnh` : ''}
               </small>
             </button>

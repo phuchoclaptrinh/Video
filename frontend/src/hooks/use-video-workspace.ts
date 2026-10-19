@@ -5,7 +5,7 @@ import { request } from '@/lib/chat-api';
 import { useMarketingCampaigns } from '@/hooks/use-marketing-campaigns';
 import { useStyleReferences } from '@/hooks/use-style-references';
 import type { MarketingCampaign } from '@/types/marketing-campaign';
-import { videoEvent } from '@/types/video-event';
+import { jobActive, videoEvent } from '@/types/video-event';
 import type {
   ChatMessage,
   Conversation,
@@ -272,10 +272,7 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
   useEffect(() => {
     const pending = messages.flatMap((message) => {
       const event = videoEvent(message);
-      return event?.job &&
-        !['COMPLETED', 'FAILED', 'CANCELLED', 'NEEDS_USER_ACTION'].includes(event.job.status)
-        ? [{ message, event }]
-        : [];
+      return event?.job && jobActive(event.job) ? [{ message, event }] : [];
     });
     if (!pending.length) return;
     const timer = window.setInterval(() => {
@@ -350,6 +347,7 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
       const event = videoEvent(message);
       return event?.job &&
         ['FAILED', 'NEEDS_USER_ACTION'].includes(event.job.status) &&
+        !jobActive(event.job) &&
         !refreshedFailures.current.has(message.id)
         ? [{ message, event }]
         : [];

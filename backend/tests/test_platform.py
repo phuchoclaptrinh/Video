@@ -2934,3 +2934,60 @@ def test_seedvis_refunded_rejection_counts_as_unbilled_and_retryable():
     assert not Prep._is_unbilled_scene_failure(rejected | {"result": {"error_detail": "Render timed out"}})
     assert not Prep._is_unbilled_scene_failure(rejected | {"status": "COMPLETED"})
     assert Prep._is_unbilled_scene_failure({"provider": "seedvis", "status": "FAILED", "error_code": "seedvis_not_started"})
+
+
+def test_failed_story_is_retried_automatically_and_members_see_a_plain_notice(client, monkeypatch):
+    from app.services.platform_auto_retry import AUTO_RETRY_LIMIT
+
+    monkeypatch.setenv("ADMIN_EMAILS", "boss@example.com")
+    register(client, "member@example.com")
+    draft = client.post("/api/v1/plans", json={"prompt": "A host explains a recipe"}).json()
+    platform = client.platform
+    use_legacy_test_provider(platform, "poyo")
+    platform.public_base_url = "https://video.example.test"
+    with platform.engine.begin() as db:
+        payload = db.execute(select(drafts.c.payload).where(drafts.c.id == draft["id"])).scalar_one()
+        payload["story_plan"] = {"clips": [{
+            "index": 1, "video_prompt": "The host introduces the meal in the kitchen.", "voice_script": "Xin chao.",
+        }]}
+        db.execute(update(drafts).where(drafts.c.id == draft["id"]).values(payload=payload))
+    configured = {"value": True}
+    monkeypatch.setattr(platform, "provider_credential_status", lambda: {"configured": configured["value"]})
+    monkeypatch.setattr(platform, "_validate_public_backend_target", lambda: None)
+    monkeypatch.setattr(platform, "_validate_public_continuity_image", lambda _draft_id: None)
+    monkeypatch.setattr(platform, "_story_media_ready", lambda *_args: True)
+    batch = client.post(f"/api/v1/plans/{draft['id']}/generate", json={"confirm_paid": True}).json()
+    configured["value"] = False
+    platform.process_story_batches()
+
+    failed = client.get(f"/api/v1/generations/{batch['id']}").json()
+    assert failed["status"] == "FAILED" and failed["auto_retry"] == {
+        "attempts": 0, "limit": AUTO_RETRY_LIMIT, "pending": True}
+    assert failed["error_code"] is None and failed["error_kind"] == "system"
+    assert "API key" not in failed["error"] and "đang tự thử lại (lần 1/3)" in failed["error"]
+
+    def run_due_retry():
+        platform.auto_retry_failed_stories()  # schedules the attempt
+        with platform.engine.begin() as db:
+            db.execute(update(story_batches).where(story_batches.c.id == batch["id"]).values(retry_after=1))
+        platform.auto_retry_failed_stories()  # runs it
+        platform.process_story_batches()
+
+    for attempt in range(1, AUTO_RETRY_LIMIT + 1):
+        run_due_retry()
+        state = client.get(f"/api/v1/generations/{batch['id']}").json()
+        assert state["auto_retry"]["attempts"] == attempt and state["status"] == "FAILED"
+    assert state["auto_retry"]["pending"] is False
+    assert "đã được ghi nhận cho quản trị viên" in state["error"]
+    platform.auto_retry_failed_stories()
+    assert client.get(f"/api/v1/generations/{batch['id']}").json()["auto_retry"]["attempts"] == AUTO_RETRY_LIMIT
+
+    # Admins keep the technical message, also in the admin video list.
+    with platform.engine.begin() as db:
+        db.execute(update(story_batches).where(story_batches.c.id == batch["id"]).values(auto_retries=0))
+    configured["value"] = True
+    run_due_retry()
+    assert client.get(f"/api/v1/generations/{batch['id']}").json()["status"] != "FAILED"
+    register(client, "boss@example.com")
+    listed = next(v for v in client.get("/api/v1/admin/videos?status=all").json() if v["id"] == batch["id"])
+    assert listed["auto_retries"] == 1

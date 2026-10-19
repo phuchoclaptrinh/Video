@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import type { MarketingCampaign, CampaignItem } from '@/types/marketing-campaign';
 import { readyToRender } from '@/hooks/use-video-workspace';
-import { jobLabels, terminal, type VideoEntry } from './AssetCanvas';
+import { jobActive, jobLabel, type VideoEntry } from './AssetCanvas';
 import { CreditCost } from './CreditCost';
 
 const labels = {
@@ -304,7 +304,7 @@ function itemState(item: CampaignItem, entry?: VideoEntry) {
   const job = entry?.event.job;
   if (job) {
     const done = job.status === 'COMPLETED';
-    const pending = !terminal.includes(job.status);
+    const pending = jobActive(job);
     const progress =
       job.clip_progress && !done
         ? ` · ${job.clip_progress.completed}/${job.clip_progress.total} cảnh`
@@ -312,7 +312,7 @@ function itemState(item: CampaignItem, entry?: VideoEntry) {
     return {
       tone: done ? 'success' : pending ? 'accent' : 'danger',
       icon: done ? 'check' : pending ? 'spin' : 'alert',
-      label: `${jobLabels[job.status] || job.status}${progress}`,
+      label: `${jobLabel(job)}${progress}`,
     };
   }
   if (item.plan) return { tone: 'neutral', icon: null, label: 'Kịch bản sẵn sàng' };

@@ -92,17 +92,18 @@ export function VideoEventCard({
     job?.status === 'FAILED' && job.retryable
       ? clips.find((clip) => clip.index === (job.clip_progress?.completed || 0) + 1)
       : undefined;
-  const likenessRejected = /prominent person|protected likeness|celebrity/i.test(job?.error || '');
+  // Codes and provider messages reach admins only; members get a plain notice in `error`.
+  const technical = job?.error_code || '';
+  const retryPending = Boolean(job?.auto_retry?.pending);
+  const likenessRejected = /prominent person|protected likeness|celebrity/i.test(technical);
   const providerRejected =
     likenessRejected ||
-    /content does not comply|platform regulations|bộ lọc an toàn|safety filter/i.test(
-      job?.error || '',
-    );
+    /content does not comply|platform regulations|bộ lọc an toàn|safety filter/i.test(technical);
   const speechRejected =
-    job?.error?.startsWith('native_speech_quality_failed') ||
-    job?.error?.startsWith('native_audio_missing') ||
+    technical.startsWith('native_speech_quality_failed') ||
+    technical.startsWith('native_audio_missing') ||
     false;
-  const visualRejected = job?.error?.startsWith('visual_reference_drift') || false;
+  const visualRejected = technical.startsWith('visual_reference_drift');
   const editableClips =
     (providerRejected || speechRejected || visualRejected) && failedClip
       ? clips.filter((clip) => clip.index >= failedClip.index)
@@ -116,22 +117,25 @@ export function VideoEventCard({
   );
   const complete = job?.status === 'COMPLETED';
   const finished =
-    complete || ['FAILED', 'CANCELLED', 'NEEDS_USER_ACTION'].includes(job?.status || '');
+    complete ||
+    (['FAILED', 'CANCELLED', 'NEEDS_USER_ACTION'].includes(job?.status || '') && !retryPending);
   const retryPreparation = Boolean(
     job?.status === 'FAILED' &&
     job.story_batch &&
     (job.retryable === true ||
       (job.clip_progress?.completed === 0 &&
-        (job.error === 'clip_preparation_failed' ||
-          job.error?.startsWith('clip_preparation_failed:') ||
-          job.error?.startsWith('voice_timeline_mismatch') ||
-          job.error?.startsWith('voice_track_empty')))),
+        (technical === 'clip_preparation_failed' ||
+          technical.startsWith('clip_preparation_failed:') ||
+          technical.startsWith('voice_timeline_mismatch') ||
+          technical.startsWith('voice_track_empty')))) &&
+    !retryPending,
   );
   const retryUnstartedClip =
     job?.status === 'FAILED' &&
     !job.story_batch &&
     job.retryable &&
-    job.error === 'seedvis_not_started';
+    technical === 'seedvis_not_started' &&
+    !retryPending;
   const approved = event.project_status === 'APPROVED' || Boolean(job);
   const labels: Record<string, string> = {
     QUEUED: 'Đang xếp hàng',
@@ -150,7 +154,9 @@ export function VideoEventCard({
         <Clapperboard size={17} />
         <strong>
           {job
-            ? labels[job.status] || job.status
+            ? retryPending
+              ? 'Đang tự thử lại'
+              : labels[job.status] || job.status
             : event.plan.story_plan
               ? 'Bản nháp kịch bản'
               : direct
@@ -436,20 +442,11 @@ export function VideoEventCard({
         </>
       ) : retryPreparation || retryUnstartedClip ? (
         <>
-          {event.plan.mode === 'live' && (
-            <label className="gpt-paid-confirm">
-              <input
-                type="checkbox"
-                checked={confirmPaid}
-                onChange={(e) => setConfirmPaid(e.target.checked)}
-              />
-              Tôi đồng ý thử lại (có thể trừ credit)
-            </label>
-          )}
+          {/* The render was already confirmed when it started; a retry needs no new consent. */}
           <button
             className="gpt-video-action"
-            disabled={busy || hasPlaceholders || (event.plan.mode === 'live' && !confirmPaid)}
-            onClick={() => onGenerate(confirmPaid)}
+            disabled={busy || hasPlaceholders}
+            onClick={() => onGenerate(true)}
           >
             {busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
             {retryUnstartedClip

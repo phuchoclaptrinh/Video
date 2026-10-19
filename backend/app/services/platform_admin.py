@@ -138,6 +138,7 @@ class PlatformAdminMixin:
             ids = row["generation_ids"] or []
             clips = ((plans.get(row["draft_id"]) or {}).get("story_plan") or {}).get("clips") or []
             current = jobs.get(ids[-1]) if ids else None
+            failed_scene = next((jobs[gid] for gid in reversed(ids) if gid in jobs and jobs[gid].status == "FAILED"), None)
             videos.append({
                 "id": row["id"], "title": row["title"][:160], "user": emails.get(row["user_id"], "?"),
                 "status": row["status"], "error": row["error_code"], "created": row["created"],
@@ -146,6 +147,9 @@ class PlatformAdminMixin:
                 "scene_status": current.status if current and row["status"] in ACTIVE_BATCH else None,
                 "credential": ((current.result or {}).get("credential") if current else None),
                 "has_video": bool(row["filename"]),
+                # The provider's own words, e.g. a safety-filter rejection; admins only.
+                "error_detail": ((failed_scene.result or {}).get("error_detail") if failed_scene else None),
+                "auto_retries": row["auto_retries"],
             })
         return videos
 
