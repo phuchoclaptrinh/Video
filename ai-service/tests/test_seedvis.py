@@ -62,9 +62,10 @@ def test_model_payloads_only_documented_fields(model, roles):
     if model == "Omni-Flash":
         assert "duration" not in body
     elif model == "Veo-3.1":
-        assert body["duration"] == f"{duration}s" and body["upscale_video"] == "none"
-    else:
-        assert body["duration"] == duration and "upscale_video" not in body
+        assert body["duration"] == f"{duration}s"
+    if model != "Omni-Flash" and model != "Veo-3.1":
+        assert body["duration"] == duration
+    assert "upscale_video" not in body
     if roles:
         field = "reference_images" if model.startswith("seedance_") else (
             "image" if len(roles) == 1 else "referenceImages" if model == "Veo-3.1" else "images")
@@ -252,3 +253,66 @@ async def test_image_pending_keeps_same_draft_identity():
     async with provider.client:
         with pytest.raises(ProviderError, match="pending_retry_same_draft"):
             await seedvis_images.generate_reference_image(provider, model="gpt-image-2", prompt="Photo", ratio="16:9", request_id="draft-1", timeout=0.1)
+
+
+def test_v2_duration_schema_rejects_shorter_veo_and_15s_seedance_2_5():
+    for model, duration in (("Veo-3.1", 4), ("Veo-3.1", 6), ("seedance_2.5", 15)):
+        body = request_body(duration)
+        body["spec"]["output"]["generate_audio"] = model == "Veo-3.1"
+        with pytest.raises(ProviderError, match="unsupported_capability"):
+            SeedvisCompiler(model).compile(ExecutionRequest.model_validate(body))
+    assert SeedvisCompiler("seedance_2.0_fast").supports(ExecutionRequest.model_validate(request_body(15)).spec)
+
+
+def test_gpt_image_edits_send_documented_image_field():
+    path, body = seedvis_images.image_request("gpt-image-2", "A still photo", "16:9", ["data:image/jpeg;base64,aW1n"])
+    assert path == "images/edits" and body["image"] == ["data:image/jpeg;base64,aW1n"]
+    assert "images" not in body and "mode" not in body
+
+
+@pytest.mark.parametrize("payload,retryable", [
+    ({"code": "validation_error", "message": "Concurrency and queue limit of your plan reached."}, True),
+    ({"code": "validation_error", "message": "aspect_ratio must be one of 16:9, 9:16",
+      "errors": {"aspect_ratio": ["invalid"]}}, False),
+])
+@pytest.mark.asyncio
+async def test_full_plan_is_retried_but_schema_errors_are_not(payload, retryable):
+    provider = adapter(lambda _: httpx.Response(422, json={"success": False, "status": 422, **payload},
+                                                headers={"Retry-After": "20"}))
+    async with provider.client:
+        with pytest.raises(ProviderError) as raised:
+            await provider.submit(provider.compile(ExecutionRequest.model_validate(request_body())))
+    assert raised.value.code == "seedvis_validation_error"
+    assert raised.value.retryable is retryable and not raised.value.ambiguous
+
+
+@pytest.mark.asyncio
+async def test_reference_image_moves_to_the_next_key_when_one_is_out_of_credit(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROVIDER_CREDENTIAL_PATH", str(tmp_path / "credentials.enc"))
+    provider = adapter(lambda _: httpx.Response(202, json=lifecycle()))
+    used = []
+
+    async def fake_image(image_provider, **_kwargs):
+        key = image_provider.api_key or image_provider.client.headers["Authorization"].removeprefix("Bearer ")
+        used.append(key)
+        if key != "test-key-third-123":
+            raise ProviderError("seedvis_insufficient_credits")
+        return b"jpeg-third"
+
+    monkeypatch.setattr("app.pipelines.video_api.generate_reference_image", fake_image)
+    async with provider.client:
+        with TestClient(create_app(ProviderRegistry([provider]), "test-internal-key")) as client:
+            client.headers["X-Internal-Key"] = "test-internal-key"
+            for key in ("test-key-first-123", "test-key-second-12", "test-key-third-123"):
+                assert client.post("/internal/v1/video/seedvis/credentials",
+                                   json={"api_key": key, "slots": 1}).status_code == 201
+            body = {"prompt": "A realistic still image of a room", "aspect_ratio": "16:9",
+                    "request_id": "draft-1", "provider": "seedvis", "model": "gpt-image-2"}
+            image = client.post("/internal/v1/planner/scene-image", json=body)
+            assert image.status_code == 200 and image.content == b"jpeg-third"
+            assert used == ["test-key-first-123", "test-key-second-12", "test-key-third-123"]
+            used.clear()
+            client.delete(f"/internal/v1/video/seedvis/credentials/{client.get('/internal/v1/video/seedvis/credentials').json()['keys'][2]['id']}")
+            failed = client.post("/internal/v1/planner/scene-image", json=body)
+            assert failed.status_code == 502 and failed.json()["detail"] == "seedvis_insufficient_credits"
+            assert used == ["test-key-first-123", "test-key-second-12"]

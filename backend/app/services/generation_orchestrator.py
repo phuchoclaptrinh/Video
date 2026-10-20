@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 POOLED_PROVIDERS = {"seedvis"}
 SLOT_WAIT_SECONDS = 15
 SLOT_CACHE_SECONDS = 30
+# A key whose account ran out of credit is skipped for this long; an admin top-up is picked up after it.
+OUT_OF_CREDIT = "seedvis_insufficient_credits"
+OUT_OF_CREDIT_SECONDS = 1800
 
 
 @dataclass(frozen=True)
@@ -41,9 +44,28 @@ class GenerationOrchestrator:
         self.settings = settings or ExecutionSettings()
         self._slot_lock = threading.Lock()
         self._slots_cache: tuple[float, list[dict] | None] = (0.0, None)
+        self._out_of_credit: dict[str, float] = {}
+
+    def out_of_credit(self) -> set[str]:
+        now = time.monotonic()
+        self._out_of_credit = {key: until for key, until in self._out_of_credit.items() if until > now}
+        return set(self._out_of_credit)
+
+    def _rotate_credential(self, job: dict, **values) -> bool:
+        """Move a task off a key that ran out of credit so the next tick submits it with another key."""
+        credential = (job.get("result") or {}).get("credential")
+        if job["provider"] not in POOLED_PROVIDERS or not credential:
+            return False
+        self._out_of_credit[credential] = time.monotonic() + OUT_OF_CREDIT_SECONDS
+        logger.warning("seedvis_key_out_of_credit", extra={"generation_id": job["generation_id"], "credential": credential})
+        result = {key: value for key, value in (job.get("result") or {}).items() if key != "credential"}
+        self.store.release(job, status="QUEUED", provider_task_id=None, result=result, error_code=OUT_OF_CREDIT, **values)
+        return True
 
     def forget_credential_slots(self) -> None:
+        # A changed key list (e.g. a topped-up or new key) is tried again right away.
         self._slots_cache = (0.0, None)
+        self._out_of_credit = {}
 
     def credential_slots(self, provider: str) -> list[dict] | None:
         expires, slots = self._slots_cache
@@ -72,7 +94,10 @@ class GenerationOrchestrator:
         if not slots:
             return None
         active = self.slot_usage(job["provider"], slots)
-        free = [slot for slot in slots if active.get(slot["id"], 0) < slot["slots"]]
+        spent = self.out_of_credit()
+        if all(slot["id"] in spent for slot in slots):
+            raise ExecutionError(OUT_OF_CREDIT)
+        free = [slot for slot in slots if slot["id"] not in spent and active.get(slot["id"], 0) < slot["slots"]]
         if not free:
             return False
         return min(free, key=lambda slot: active.get(slot["id"], 0) / slot["slots"])["id"]
@@ -188,6 +213,9 @@ class GenerationOrchestrator:
                 raise
             result = self.client.call(job["provider"], "status", task_id=job["provider_task_id"],
                                       **poll_options, **credential)
+        if result["status"] == "failed" and result.get("error_code") == OUT_OF_CREDIT and self._rotate_credential(job):
+            # Seedvis closes such a task unbilled; it is resubmitted on another account.
+            return
         statuses = {
             "queued": "SUBMITTED",
             "generating": "GENERATING",
@@ -212,6 +240,8 @@ class GenerationOrchestrator:
         return self.settings.poll_seconds
 
     def _handle_error(self, job, error):
+        if error.code == OUT_OF_CREDIT and not job["provider_task_id"] and self._rotate_credential(job):
+            return
         attempts = job["attempts"] + 1
         budget = min(
             self.settings.max_retries,

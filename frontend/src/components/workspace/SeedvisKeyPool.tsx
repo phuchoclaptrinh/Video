@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { request } from '@/lib/chat-api';
 
-type PoolKey = { id: string; label: string; slots: number; hint: string; active: number };
+type PoolKey = {
+  id: string;
+  label: string;
+  slots: number;
+  hint: string;
+  active: number;
+  out_of_credit?: boolean;
+};
 type Pool = { keys: PoolKey[]; total_slots: number; active: number; waiting: number };
 
 // Several Seedvis accounts: each key runs up to its own number of videos at once.
@@ -86,7 +93,17 @@ export function SeedvisKeyPool({ onChange }: { onChange: () => void }) {
             <li key={item.id}>
               <span className="flow-key-pool-name">
                 <strong>{item.label || 'Key Seedvis'}</strong>
-                <small>{item.hint}</small>
+                <small>
+                  {item.hint}
+                  {item.out_of_credit && (
+                    <span
+                      className="flow-key-pool-usage empty"
+                      title="Key này báo hết credit; video mới đang chạy trên các key khác"
+                    >
+                      Hết credit
+                    </span>
+                  )}
+                </small>
               </span>
               <span
                 className={

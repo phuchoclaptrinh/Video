@@ -66,6 +66,10 @@ class SeedvisKeyPool:
         with self.lock:
             return next((entry["api_key"] for entry in self._entries() if entry["id"] == key_id), None)
 
+    def api_keys(self) -> list[str]:
+        with self.lock:
+            return [entry["api_key"] for entry in self._entries()]
+
     def primary_key(self) -> str | None:
         with self.lock:
             entries = self._entries()

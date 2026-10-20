@@ -23,12 +23,13 @@ class PlatformSeedvisKeysMixin:
         if not isinstance(keys, list):
             raise HTTPException(503, "Không đọc được danh sách key Seedvis")
         active = self.runtime.slot_usage("seedvis", [{"id": key["id"], "slots": key["slots"]} for key in keys])
+        spent = self.runtime.out_of_credit()
         with self.engine.connect() as db:
             waiting = db.execute(select(func.count()).select_from(executions).where(
                 executions.c.provider == "seedvis", executions.c.status == "QUEUED",
             )).scalar_one()
         return {
-            "keys": [key | {"active": active.get(key["id"], 0)} for key in keys],
+            "keys": [key | {"active": active.get(key["id"], 0), "out_of_credit": key["id"] in spent} for key in keys],
             "total_slots": sum(key["slots"] for key in keys),
             "active": sum(active.get(key["id"], 0) for key in keys),
             "waiting": waiting,

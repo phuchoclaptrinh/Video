@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine, update
 
 from app.services.generation_orchestrator import ExecutionSettings, GenerationOrchestrator
+from app.services.video_execution_client import ExecutionError
 from app.services.video_execution_store import ExecutionStore, executions
 from tests.test_platform import client, register  # noqa: F401 - shared fixture
 from tests.test_video_execution import payload
@@ -146,7 +147,7 @@ def test_settings_api_lists_usage_and_refuses_to_delete_a_busy_key(client):  # n
             created_at=1, run_started_at=1, next_run_at=1, lease_until=0,
         ))
     listed = client.get("/api/v1/seedvis/keys").json()
-    assert listed == {"keys": [keys[0] | {"active": 1}], "total_slots": 4, "active": 1, "waiting": 0}
+    assert listed == {"keys": [keys[0] | {"active": 1, "out_of_credit": False}], "total_slots": 4, "active": 1, "waiting": 0}
     assert client.get("/api/v1/seedvis/capacity").json() == {"keys": 1, "total_slots": 4, "active": 1, "waiting": 0}
     added = client.post("/api/v1/seedvis/keys", json={"api_key": "second-seedvis-key", "label": "B", "slots": 3})
     assert added.status_code == 201 and added.json()["total_slots"] == 7
@@ -156,3 +157,52 @@ def test_settings_api_lists_usage_and_refuses_to_delete_a_busy_key(client):  # n
     assert busy.status_code == 409 and "đang chạy 1 video" in busy.json()["detail"]
     assert client.delete("/api/v1/seedvis/keys/keyb").json()["total_slots"] == 4
     assert client.delete("/api/v1/seedvis/keys/..%2Fpoyo").status_code in {404, 422}
+
+
+class OutOfCreditClient(PoolClient):
+    """keya's account has no credit: refused at submit, or accepted and then failed while queued."""
+
+    def __init__(self, at_submit=True):
+        super().__init__([{"id": "keya", "slots": 2}, {"id": "keyb", "slots": 2}])
+        self.at_submit = at_submit
+
+    def call(self, provider, action, **kwargs):
+        if action != "validate" and kwargs.get("credential") == "keya":
+            self.calls.append((action, "keya"))
+            if action == "submit" and self.at_submit:
+                raise ExecutionError("seedvis_insufficient_credits")
+            if action == "submit":
+                return {"provider": provider, "provider_task_id": "task-a", "status": "queued"}
+            return {"provider": provider, "provider_task_id": kwargs["task_id"], "status": "failed",
+                    "error_code": "seedvis_insufficient_credits", "outputs": []}
+        return super().call(provider, action, **kwargs)
+
+
+@pytest.mark.parametrize("at_submit", [True, False])
+def test_a_key_out_of_credit_hands_its_task_to_another_key(runtime, at_submit):
+    runtime.client = OutOfCreditClient(at_submit)
+    gid = enqueue(runtime, "scene-credit")
+    job = runtime.tick(gid)
+    if not at_submit:
+        assert job["provider_task_id"] == "task-a"
+        make_due(runtime, gid)
+        job = runtime.tick(gid)
+    assert job["status"] == "QUEUED" and job["provider_task_id"] is None and "credential" not in job["result"]
+    assert job["attempts"] == 0 and runtime.out_of_credit() == {"keya"}
+    job = runtime.tick(gid)
+    assert job["status"] == "SUBMITTED" and job["result"]["credential"] == "keyb"
+    # Later tasks skip the empty key straight away, even though it has free slots.
+    assert runtime.tick(enqueue(runtime, "scene-next"))["result"]["credential"] == "keyb"
+    assert [call for call in runtime.client.calls if call[0] == "submit"] == [
+        ("submit", "keya"), ("submit", "keyb"), ("submit", "keyb")]
+
+
+def test_the_task_fails_only_when_every_key_is_out_of_credit(runtime):
+    runtime.client = OutOfCreditClient()
+    runtime.client.slots = [{"id": "keya", "slots": 2}]
+    job = runtime.tick(enqueue(runtime, "scene-empty"))
+    assert job["status"] == "QUEUED"
+    job = runtime.tick(job["generation_id"])
+    assert job["status"] == "FAILED" and job["error_code"] == "seedvis_insufficient_credits"
+    runtime.forget_credential_slots()  # an admin edited the keys, e.g. after a top-up
+    assert runtime.out_of_credit() == set()

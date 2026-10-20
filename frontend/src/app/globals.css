@@ -1608,6 +1608,11 @@ svg {
   background: var(--warning-soft);
   color: var(--warning);
 }
+.flow-key-pool-usage.empty {
+  margin-left: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 .flow-key-pool-slots {
   display: inline-flex;
   align-items: center;

@@ -19,6 +19,7 @@ from app.core.voice_presets import tts_voice_instructions
 from app.pipelines.marketing_planner import create_marketing_campaign
 from app.pipelines.planner_transport import generation_params
 from app.pipelines.reference_grounding import ground_book_story
+from app.pipelines.scene_line_rewrite import rewrite_scene_line
 from app.pipelines.seedvis_images import generate_reference_image
 from app.pipelines.story_planner import create_book_story_plan, expand_story_narration
 from app.pipelines.style_learning import learn_style
@@ -125,6 +126,21 @@ class NarrationExpansionInput(BaseModel):
     target_duration_seconds: int = Field(ge=8, le=40)
     current_duration_seconds: float = Field(gt=0, le=120)
     voice_bible: str = Field(default="", max_length=600)
+
+
+class SceneLineInput(BaseModel):
+    index: int = Field(ge=1, le=20)
+    duration_seconds: int = Field(ge=1, le=60)
+    voice_script: str = Field(min_length=2, max_length=1000)
+    beat: str = Field(default="", max_length=200)
+    purpose: str = Field(default="", max_length=500)
+
+
+class SceneLineRewriteInput(BaseModel):
+    scenes: list[SceneLineInput] = Field(min_length=1, max_length=20)
+    scene_index: int = Field(ge=1, le=20)
+    issues: list[str] = Field(default_factory=list, max_length=10)
+    transcript: str = Field(default="", max_length=2000)
 
 
 class ChatMessage(BaseModel):
@@ -462,22 +478,47 @@ def create_app(
             raise HTTPException(502, str(exc)) from None
         return {"clips": clips}
 
+    @application.post("/internal/v1/planner/rewrite-scene-line", dependencies=[Depends(authorize)])
+    async def rewrite_line(body: SceneLineRewriteInput):
+        if not vault.get("openai_planner"):
+            raise HTTPException(409, "planner_credentials_missing")
+        try:
+            line = await rewrite_scene_line(
+                [scene.model_dump() for scene in body.scenes], body.scene_index, body.issues, body.transcript,
+                vault, os.getenv("OPENAI_PLANNER_MODEL", "gpt-4o-mini"),
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from None
+        return {"voice_script": line}
+
     @application.post("/internal/v1/planner/scene-image", dependencies=[Depends(authorize)])
     async def generate_scene_image(body: SceneImageInput):
         image_provider = body.provider or os.getenv("IMAGE_PROVIDER", "openai")
         if image_provider == "seedvis":
-            try:
-                image_data = await generate_reference_image(
-                    credential_provider("seedvis"), model=body.model or os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2"),
-                    prompt=body.prompt, ratio=body.aspect_ratio,
-                    request_id=body.request_id or secrets.token_hex(16),
-                    reference_images=body.reference_images,
-                )
-                return Response(image_data, media_type="image/jpeg")
-            except ProviderError as exc:
-                raise HTTPException(502, exc.code) from None
-            except httpx.HTTPError:
-                raise HTTPException(502, "seedvis_image_download_failed") from None
+            shared = credential_provider("seedvis")
+            request_id = body.request_id or secrets.token_hex(16)
+            # The first key goes first; one that ran out of credit hands the image to the next key.
+            providers = [shared] + [
+                SeedvisProvider(shared.client, shared.compiler.model, api_key=api_key)
+                for api_key in seedvis_keys.api_keys()[1:]
+            ]
+            for index, provider in enumerate(providers):
+                try:
+                    image_data = await generate_reference_image(
+                        provider, model=body.model or os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2"),
+                        prompt=body.prompt, ratio=body.aspect_ratio, request_id=request_id,
+                        reference_images=body.reference_images,
+                    )
+                    return Response(image_data, media_type="image/jpeg")
+                except ProviderError as exc:
+                    if exc.code == "seedvis_insufficient_credits" and index < len(providers) - 1:
+                        logger.warning("Seedvis key %s is out of credit; trying the next key for an image", index + 1)
+                        continue
+                    raise HTTPException(502, exc.code) from None
+                except httpx.HTTPError:
+                    raise HTTPException(502, "seedvis_image_download_failed") from None
         image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
         if body.model is not None and body.model != image_model:
             raise HTTPException(422, "unsupported_image_model")
