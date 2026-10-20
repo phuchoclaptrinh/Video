@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
   Check,
@@ -26,7 +25,7 @@ import type { LibraryVideo, WorkspaceConfig, WorkspaceUser } from '@/types/works
 import { providerLabel, videoModelLabel } from '@/types/workspace';
 import { AssetCanvas, terminal } from './AssetCanvas';
 import { ProjectHistory } from './ProjectHistory';
-import { WorkspaceAuth } from './WorkspaceAuth';
+import { LandingPage } from '@/components/landing/LandingPage';
 import { WorkspaceComposer } from './WorkspaceComposer';
 import { WorkspaceInspector } from './WorkspaceInspector';
 import { WorkspaceSettings } from './WorkspaceSettings';
@@ -439,7 +438,6 @@ export function FlowWorkspace() {
   const [config, setConfig] = useState<WorkspaceConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const router = useRouter();
   const refreshConfig = useCallback(async () => {
     try {
       setConfig(await request<WorkspaceConfig>('/config'));
@@ -474,17 +472,8 @@ export function FlowWorkspace() {
         </span>
       </main>
     );
-  if (!user)
-    return (
-      <WorkspaceAuth
-        onAuthenticated={(next) => {
-          // Admins sign in to their own console; the Studio stays reachable from there.
-          if (next.is_admin) return router.replace('/admin');
-          setUser(next);
-          void refreshConfig();
-        }}
-      />
-    );
+  // Visitors get the product page; signing in happens on /login and returns here.
+  if (!user) return <LandingPage />;
   if (!config)
     return (
       <main className="flow-loading">

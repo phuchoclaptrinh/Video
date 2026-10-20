@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, Clapperboard, Film, ImagePlus, Loader2, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clapperboard, Loader2 } from 'lucide-react';
 import { request } from '@/lib/chat-api';
 import type { WorkspaceUser } from '@/types/workspace';
+import { HeroPreview } from '@/components/landing/LandingPage';
 
 function Brand({ admin }: { admin?: boolean }) {
   return (
@@ -34,36 +36,36 @@ export function WorkspaceAuth({
   return (
     <main className="flow-auth">
       <section className="flow-auth-hero">
-        <Brand admin={admin} />
+        {admin ? (
+          <Brand admin />
+        ) : (
+          <Link href="/" className="flow-auth-home">
+            <Brand />
+          </Link>
+        )}
         <div className="flow-auth-pitch">
-          <h2>Biến ảnh sản phẩm thành video quảng cáo có kịch bản.</h2>
+          <h2>Từ ảnh sản phẩm đến video bán hàng có lời thoại hoàn chỉnh.</h2>
           <ul>
             <li>
-              <ImagePlus size={20} />
-              <span>
-                <b>Bắt đầu từ ảnh sản phẩm</b>
-                Tải tối đa 6 ảnh, AI đọc chi tiết và giữ đúng sản phẩm trong từng cảnh.
-              </span>
+              <CheckCircle2 size={16} /> Kịch bản có hook, lời thoại tiếng Việt
             </li>
             <li>
-              <Sparkles size={20} />
-              <span>
-                <b>Kịch bản bắt trend</b>
-                Hook mở đầu cuốn hút, lời thoại tiếng Việt theo nhịp video ngắn.
-              </span>
+              <CheckCircle2 size={16} /> Tự kiểm tra giọng đọc và tạo lại cảnh lỗi
             </li>
             <li>
-              <Film size={20} />
-              <span>
-                <b>Video hoàn chỉnh</b>
-                Tạo từng cảnh, kiểm tra lời nói rồi tự ghép thành video để tải về.
-              </span>
+              <CheckCircle2 size={16} /> Tự ghép thành video để tải về
             </li>
           </ul>
         </div>
-        <small>Hỗ trợ Veo 3.1, Omni Flash, Seedance và nhiều model video AI.</small>
+        <HeroPreview />
+        <small>Chạy trên Google Veo 3.1, Omni Flash, Seedance cùng GPT Image và Nano Banana.</small>
       </section>
       <section className="flow-auth-panel">
+        {!admin && (
+          <Link href="/" className="flow-auth-back">
+            <ArrowLeft size={15} /> Trang chủ
+          </Link>
+        )}
         <Brand admin={admin} />
         <form
           onSubmit={async (event) => {
