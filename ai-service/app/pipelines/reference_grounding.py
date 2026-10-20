@@ -8,7 +8,7 @@ import httpx
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.voice_presets import voice_preset_for_request
-from app.pipelines.dialogue_boundaries import BOUNDARY_POLICY
+from app.pipelines.dialogue_boundaries import BOUNDARY_POLICY, SPOKEN_CODE_RULE
 from app.pipelines.dialogue_timing import validate_scene_dialogue
 from app.pipelines.planner_schema import grounding_response_format, response_content, unpack_scenes
 from app.pipelines.planner_transport import (
@@ -65,7 +65,7 @@ async def ground_book_story(
                 "Develop useful grounded dialogue without filler or repetition; do not force a different speed. "
                 "Use plain Vietnamese with accents and normal sentence punctuation only; no Markdown, "
                 "emoji, brackets, quotes, hashtags or ellipses. Spell out numbers, prices, percentages "
-                "and units naturally without changing their meaning. Preserve the user's intent and setting. "
+                "and units naturally without changing their meaning. " + SPOKEN_CODE_RULE + "Preserve the user's intent and setting. "
                 "If there are too few grounded facts, use a natural reaction or invitation rather than "
                 "inventing claims. Video prompts must "
                 "describe the same person, setting and visible book as the reference, with small natural "

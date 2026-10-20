@@ -19,8 +19,9 @@ from app.services.platform_shared import Path, video_quality_reports, video_scen
 from app.services.spoken_text import clean_spoken_text
 from app.services.video_continuity import scene_transition
 
-# v4 reads digits in transcripts as Vietnamese words ("95%" matches "chín mươi lăm phần trăm").
-NATIVE_REVIEW_PROFILE = "continuity-v4"
+# v4 reads digits in transcripts as Vietnamese words ("95%" matches "chín mươi lăm phần trăm");
+# v5 reads printed codes by their letter names ("TK01" matches "tê ca không một").
+NATIVE_REVIEW_PROFILE = "continuity-v5"
 SPEECH_ISSUE_LABELS = {
     "native_speech_repetition": "đọc lặp từ",
     "native_speech_incomplete": "đọc thiếu hoặc bị cắt",
@@ -55,16 +56,23 @@ class PlatformNativeAudioMixin:
         except (OSError, subprocess.TimeoutExpired):
             return [], {}
 
-    def _native_speech_failure(self, draft: dict, scene_index: int) -> str:
-        """Readable failure keeping the machine prefix, so the user can see what the model actually said."""
+    def _native_speech_report(self, draft: dict, scene_index: int) -> dict | None:
+        """The newest failed speech check of a scene: its issues and what the model actually said."""
         project_id = self._project_id_for_draft(draft["id"])
+        if not project_id:
+            return None
         with self.engine.connect() as db:
             report = db.execute(select(video_quality_reports).where(
                 video_quality_reports.c.project_id == project_id,
                 video_quality_reports.c.stage == "NATIVE_SPEECH",
                 video_quality_reports.c.scene_index == scene_index,
                 video_quality_reports.c.status == "FAIL",
-            ).order_by(video_quality_reports.c.created.desc())).mappings().first() if project_id else None
+            ).order_by(video_quality_reports.c.created.desc())).mappings().first()
+        return dict(report) if report else None
+
+    def _native_speech_failure(self, draft: dict, scene_index: int) -> str:
+        """Readable failure keeping the machine prefix, so the user can see what the model actually said."""
+        report = self._native_speech_report(draft, scene_index)
         if not report:
             return "native_speech_quality_failed"
         labels = [SPEECH_ISSUE_LABELS[issue] for issue in report["issues"] if issue in SPEECH_ISSUE_LABELS]

@@ -93,39 +93,8 @@ class PlatformProjectsMixin:
                 ).mappings().first()
                 if draft is None:
                     raise HTTPException(404, "Khong tim thay kich ban")
-                draft_payload = copy.deepcopy(draft["payload"])
-                clips = (draft_payload.get("story_plan") or {}).get("clips") or []
-                clip = next((item for item in clips if item.get("index") == scene_index), None)
-                if clip is None:
-                    raise HTTPException(409, "Khong tim thay canh bi loi trong kich ban")
-                spoken = clean_spoken_text(voice_script)
-                if not spoken:
-                    raise HTTPException(422, "Lời thoại phải có nội dung đọc được sau khi bỏ ký hiệu")
-                clip["video_prompt"] = video_prompt
-                clip["voice_script"] = spoken
-                clip.pop("unresolved_voice_placeholder", None)
-                if STORY_PLACEHOLDER_RE.search(voice_script):
-                    clip["unresolved_voice_placeholder"] = True
-                draft_payload["story_plan"]["full_voice_script"] = joined_voice_script(draft_payload["story_plan"])
-                version_payload = copy.deepcopy(version["payload"])
-                version_payload["story_plan"] = draft_payload["story_plan"]
-                event["plan"]["story_plan"] = draft_payload["story_plan"]
-                db.execute(
-                    update(drafts).where(drafts.c.id == draft_id).values(payload=draft_payload)
-                )
-                db.execute(
-                    update(story_plan_versions)
-                    .where(story_plan_versions.c.id == version["id"])
-                    .values(payload=version_payload)
-                )
-                db.execute(
-                    update(video_scenes)
-                    .where(
-                        video_scenes.c.project_id == project["id"],
-                        video_scenes.c.plan_version == version["version"],
-                        video_scenes.c.scene_index == scene_index,
-                    )
-                    .values(payload=clip, updated=time.time())
+                event["plan"]["story_plan"] = self._store_scene_revision(
+                    db, dict(draft), dict(version), scene_index, video_prompt, voice_script
                 )
                 content = json.dumps(event, ensure_ascii=False)
                 db.execute(
@@ -134,6 +103,44 @@ class PlatformProjectsMixin:
                     .values(content=content)
                 )
             return dict(message) | {"content": content}
+
+    def _store_scene_revision(
+        self, db, draft: dict, version: dict | None, scene_index: int, video_prompt: str, voice_script: str
+    ) -> dict:
+        """Write one scene's new prompt and line to the draft, its approved plan version and scene row."""
+        draft_payload = copy.deepcopy(draft["payload"])
+        clips = (draft_payload.get("story_plan") or {}).get("clips") or []
+        clip = next((item for item in clips if item.get("index") == scene_index), None)
+        if clip is None:
+            raise HTTPException(409, "Khong tim thay canh bi loi trong kich ban")
+        spoken = clean_spoken_text(voice_script)
+        if not spoken:
+            raise HTTPException(422, "Lời thoại phải có nội dung đọc được sau khi bỏ ký hiệu")
+        clip["video_prompt"] = video_prompt
+        clip["voice_script"] = spoken
+        clip.pop("unresolved_voice_placeholder", None)
+        if STORY_PLACEHOLDER_RE.search(voice_script):
+            clip["unresolved_voice_placeholder"] = True
+        draft_payload["story_plan"]["full_voice_script"] = joined_voice_script(draft_payload["story_plan"])
+        db.execute(update(drafts).where(drafts.c.id == draft["id"]).values(payload=draft_payload))
+        if version:
+            version_payload = copy.deepcopy(version["payload"])
+            version_payload["story_plan"] = draft_payload["story_plan"]
+            db.execute(
+                update(story_plan_versions)
+                .where(story_plan_versions.c.id == version["id"])
+                .values(payload=version_payload)
+            )
+            db.execute(
+                update(video_scenes)
+                .where(
+                    video_scenes.c.project_id == version["project_id"],
+                    video_scenes.c.plan_version == version["version"],
+                    video_scenes.c.scene_index == scene_index,
+                )
+                .values(payload=clip, updated=time.time())
+            )
+        return draft_payload["story_plan"]
 
     def video_project(self, uid: str, project_id: str) -> dict:
         project = self.owned(video_projects, project_id, uid)

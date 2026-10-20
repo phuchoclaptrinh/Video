@@ -9,6 +9,14 @@ DIGIT_WORDS = ("không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy",
 SCALE_WORDS = ("", "nghìn", "triệu", "tỷ")
 # Speech recognisers write "95%" or "2 đến 6" where scripts spell the words out.
 NUMBER_RE = re.compile(r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+(?!\d)|\d+)(?:[.,](\d+))?(?:\s*(%|k\b|đ\b))?", re.IGNORECASE)
+# Transcripts write a code the way it is printed ("TK01", "XL"); scripts spell it with Vietnamese letter names.
+CODE_RE = re.compile(r"(?<!\w)(?:(?=[A-Za-z]*\d)(?=\d*[A-Za-z])[A-Za-z\d]{2,12}|[A-Z]{2,6})(?!\w)")
+LETTER_NAMES = {
+    "a": "a", "b": "bê", "c": "xê", "d": "dê", "e": "e", "f": "ép", "g": "giê", "h": "hát", "i": "i",
+    "j": "gi", "k": "ca", "l": "e lờ", "m": "em mờ", "n": "en nờ", "o": "o", "p": "pê", "q": "quy",
+    "r": "e rờ", "s": "ét xì", "t": "tê", "u": "u", "v": "vê", "w": "vê kép", "x": "ích xì", "y": "i dài",
+    "z": "dét",
+}
 # Spoken variants of the same number word: lăm/năm, tư/bốn, ngàn/nghìn, lẻ/linh (diacritics already removed).
 NUMBER_VARIANTS = {"lam": "nam", "tu": "bon", "ngan": "nghin", "le": "linh"}
 
@@ -52,8 +60,16 @@ def spell_numbers(text: str) -> str:
     return NUMBER_RE.sub(spoken, text)
 
 
+def spell_codes(text: str) -> str:
+    def spoken(match: re.Match) -> str:
+        return " " + " ".join(DIGIT_WORDS[int(char)] if char.isdigit() else LETTER_NAMES[char.lower()]
+                              for char in match[0]) + " "
+
+    return CODE_RE.sub(spoken, text)
+
+
 def speech_tokens(text: str) -> list[str]:
-    normalized = unicodedata.normalize("NFKD", spell_numbers(text).lower().replace("đ", "d"))
+    normalized = unicodedata.normalize("NFKD", spell_numbers(spell_codes(text)).lower().replace("đ", "d"))
     tokens = re.findall(r"[a-z0-9]+", "".join(c for c in normalized if not unicodedata.combining(c)))
     return [NUMBER_VARIANTS.get(token, token) for token in tokens]
 

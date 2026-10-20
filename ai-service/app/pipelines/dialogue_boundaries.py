@@ -12,6 +12,20 @@ BOUNDARY_POLICY = (
     "tr\u1ea3i nghi\u1ec7m ch\u01a1i or th\u00fa just to meet a count. Compose shorter complete wording instead "
     "of chopping words or padding. No fresh greetings, repeated introductions or duplicated boundary words. "
 )
+# Native video models stumble on letter-digit codes inside Vietnamese speech and self-correct mid-line,
+# and a transcript writes such a code back as "TK01", so every planner writes codes as they are read aloud.
+SPOKEN_CODE_RULE = (
+    "Product codes, model numbers, SKUs and abbreviations are written the way a Vietnamese seller reads them "
+    "aloud, never as written: each letter becomes its Vietnamese letter name and each digit of a code a separate "
+    "Vietnamese number word, all separated by spaces, for example TK01 becomes tê ca không một and "
+    "A5 becomes a năm. Letter names: a, bê, xê, dê, đê, e, ép, giê, hát, "
+    "i, ca, e lờ, em mờ, en nờ, o, pê, quy, e rờ, ét xì, tê, u, vê, "
+    "vê kép, ích xì, i dài, dét. Quantities, prices and clothing sizes stay ordinary "
+    "spelled-out numbers. A foreign brand or product name stays one word with its familiar spelling, such as Takit. "
+    "Say a code at most once in the whole video and only when the seller's facts need it; otherwise name the "
+    "product by its brand or type, such as bộ Takit. Put a code inside a short sentence of its own, never at "
+    "the end of a scene and never split across scenes. "
+)
 
 # Lowercase only recognizable clause openings; unknown names stay untouched.
 _CLAUSE_OPENINGS = (

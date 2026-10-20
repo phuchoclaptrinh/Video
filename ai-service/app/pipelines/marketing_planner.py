@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.pipelines.dialogue_boundaries import SPOKEN_CODE_RULE
 from app.pipelines.planner_schema import object_schema, response_content, strict_format, text_schema
 from app.pipelines.planner_transport import (
     PLANNER_DEADLINE_SECONDS,
@@ -109,7 +110,8 @@ async def create_marketing_campaign(
         "model": model,
         **generation_params(model, temperature=0.6, max_tokens=7000),
         "messages": [
-            {"role": "system", "content": PROMPT_PATH.read_text(encoding="utf-8")},
+            {"role": "system", "content": PROMPT_PATH.read_text(encoding="utf-8")
+             + "\nSpoken hooks follow this rule for codes: " + SPOKEN_CODE_RULE},
             {
                 "role": "user",
                 "content": [{"type": "text", "text": text}, *image_parts(images)]

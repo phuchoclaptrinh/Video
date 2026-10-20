@@ -20,7 +20,7 @@ from pydantic_core import PydanticCustomError
 from app.core.credential_vault import CredentialVault
 from app.core.voice_presets import VoicePreset, get_voice_preset, voice_preset_for_request
 from app.pipelines.creative_formats import choose_creative_format, creative_format_instruction
-from app.pipelines.dialogue_boundaries import normalize_dialogue_boundaries
+from app.pipelines.dialogue_boundaries import SPOKEN_CODE_RULE, normalize_dialogue_boundaries
 from app.pipelines.dialogue_timing import validate_scene_dialogue
 from app.pipelines.planner_schema import (
     MAX_SPOKEN_CHARS,
@@ -290,7 +290,8 @@ SPEECH_FIT_INSTRUCTION = (
     "max_words; Vietnamese words are separated by spaces, so count them before answering. Keep the meaning, "
     "facts and exact figures, the speaker's voice, any hook or call to action, and complete sentences that "
     "still flow from the previous line into the next one. Remove repetition, filler and details the picture "
-    "already shows; never add new facts, greetings, emoji or Markdown. Return only the JSON object."
+    "already shows; never add new facts, greetings, emoji or Markdown. " + SPOKEN_CODE_RULE
+    + "Return only the JSON object."
 )
 
 
@@ -360,6 +361,7 @@ async def create_book_story_plan(
     if not api_key:
         raise ValueError("planner_credentials_missing")
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+    system_prompt += "\nSPOKEN CODES POLICY (authoritative for every voice_script):\n" + SPOKEN_CODE_RULE
     images = reference_image_data_urls or ([reference_image_data_url] if reference_image_data_url else [])
     if len(images) > 6:
         raise ValueError("planner_too_many_images")
