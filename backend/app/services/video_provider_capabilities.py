@@ -30,7 +30,7 @@ class VideoProviderCapabilities(BaseModel):
     @classmethod
     def documented_fallback(cls, provider: str, model: str):
         if provider == "seedvis":
-            durations = {"Veo-3.1": [4, 6, 8], "seedance_2.5": [5, 10, 15, 20, 25, 30],
+            durations = {"Veo-3.1": [8], "seedance_2.5": [5, 10, 20, 25, 30],
                          "seedance_2.0_fast": [5, 10, 15], "Omni-Flash": [10]}
             return cls(provider=provider, model=model, native_audio=model in {"Veo-3.1", "Omni-Flash"},
                        first_frame=model in {"Veo-3.1", "Omni-Flash"}, reference_images=model in durations,

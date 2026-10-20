@@ -66,9 +66,9 @@ def test_seedvis_image_request_uses_documented_image_to_image_mode():
     from app.pipelines.seedvis_images import image_request
 
     path, body = image_request("gpt-image-2", "prompt", "16:9", [PHOTO])
-    assert path == "images/edits" and body["mode"] == "image-to-image" and body["images"] == [PHOTO]
+    assert path == "images/edits" and body["image"] == [PHOTO] and "mode" not in body
     path, body = image_request("gpt-image-2", "prompt", "16:9")
-    assert path == "images/generations" and "images" not in body
+    assert path == "images/generations" and "image" not in body
     path, body = image_request("GEM_PIX_2", "prompt", "16:9", [PHOTO])
     assert path == "google/v1beta/interactions" and body["mode"] == "image-to-image"
     assert body["reference_images"] == [PHOTO]

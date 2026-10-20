@@ -47,8 +47,8 @@ class SeedvisCompiler:
             parts.append("Avoid: " + spec.constraints.negative_prompt)
         body = {"model": self.model, "prompt": "\n".join(parts), "aspect_ratio": spec.output.aspect_ratio, "count": 1}
         if self.model == "Veo-3.1":
-            body.update(duration=f"{spec.output.duration_seconds}s",
-                        upscale_video="1080p" if spec.output.resolution_preference == "1080p" else "none")
+            # v2.0 has no resolution or upscale field for Veo; a 1080p preference renders at the default size.
+            body["duration"] = f"{spec.output.duration_seconds}s"
         elif self.capabilities.durations and self.capabilities.duration_parameter:
             body["duration"] = spec.output.duration_seconds
         assets = {asset.asset_id: asset.source_url for asset in request.assets}

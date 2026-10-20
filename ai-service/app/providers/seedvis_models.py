@@ -1,4 +1,4 @@
-"""Seedvis API v2.0 contract checked 2026-10-13; /models determines availability."""
+"""Seedvis API v2.0 contract checked 2026-10-19; /models determines availability."""
 
 from dataclasses import dataclass
 
@@ -15,8 +15,9 @@ class SeedvisVideoModel:
 
 
 VIDEO_MODELS = {
-    "Veo-3.1": SeedvisVideoModel("Google Veo 3.1", (4, 6, 8), native_audio=True),
-    "seedance_2.5": SeedvisVideoModel("Seedance 2.5", (5, 10, 15, 20, 25, 30),
+    # The v2.0 schema lists "8s" as the only Veo duration; shorter values are rejected.
+    "Veo-3.1": SeedvisVideoModel("Google Veo 3.1", (8,), native_audio=True),
+    "seedance_2.5": SeedvisVideoModel("Seedance 2.5", (5, 10, 20, 25, 30),
                                     ("16:9", "9:16", "1:1", "3:4", "4:3", "21:9"), False),
     "seedance_2.0_fast": SeedvisVideoModel("Seedance 2.0 fast", (5, 10, 15),
                                          ("16:9", "9:16", "1:1", "3:4", "4:3", "21:9"), False),

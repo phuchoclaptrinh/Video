@@ -161,10 +161,17 @@ class SeedvisProvider(VideoProviderAdapter):
                 "cancel_unavailable",
                 "rate_limit_exceeded",
             }
+            # v2.0 answers a full plan (running + queued streams) with the same 422 as a schema error;
+            # only the former clears up by waiting, so it is told apart by its message.
+            plan_full = code == "validation_error" and bool(
+                re.search(r"concurren|queue|limit|đồng thời|hàng đợi|giới hạn", str(data), re.IGNORECASE)
+            )
+            known_rejection = known_rejection or plan_full
             retry_status = (
                 response.status_code == 429
                 or response.status_code >= 500
                 or (response.status_code == 408 and replayable)
+                or plan_full
             )
             raise ProviderError(
                 "seedvis_" + code,

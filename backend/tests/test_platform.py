@@ -34,7 +34,7 @@ NATIVE_NEXT = "để mỗi người có thể dành thêm chút thời gian suy 
 
 
 @pytest.mark.parametrize("model,durations", [
-    ("Veo-3.1", [4, 6, 8]), ("seedance_2.5", [5, 10, 15, 20, 25, 30]),
+    ("Veo-3.1", [8]), ("seedance_2.5", [5, 10, 20, 25, 30]),
     ("seedance_2.0_fast", [5, 10, 15]), ("Omni-Flash", [10]),
 ])
 def test_seedvis_config_and_direct_planning(client, monkeypatch, model, durations):

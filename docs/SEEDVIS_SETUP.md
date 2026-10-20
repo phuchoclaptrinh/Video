@@ -8,8 +8,8 @@ Adapter mới độc lập với PoYo và Seedance/BytePlus cũ. Chat, bộ nh�
 
 | Loại | ID cấu hình | Phạm vi trong project |
 | --- | --- | --- |
-| Video | `Veo-3.1` | Text/image-to-video; clip 4, 6, 8 giây; kịch bản nhiều cảnh với thoại native |
-| Video | `seedance_2.5` | Clip đơn từ text/ảnh; 5, 10, 15, 20, 25, 30 giây |
+| Video | `Veo-3.1` | Text/image-to-video; clip 8 giây (API v2.0 chỉ nhận `8s`); kịch bản nhiều cảnh với thoại native |
+| Video | `seedance_2.5` | Clip đơn từ text/ảnh; 5, 10, 20, 25, 30 giây |
 | Video | `seedance_2.0_fast` | Clip đơn từ text/ảnh; 5, 10, 15 giây |
 | Video | `Omni-Flash` | Clip đơn từ text/ảnh; thời lượng do nhà cung cấp quyết định |
 | Ảnh | `gpt-image-2` | GPT Image 2; tạo ảnh tham chiếu |

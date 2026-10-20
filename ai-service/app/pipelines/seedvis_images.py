@@ -38,7 +38,8 @@ def image_request(
             "response_format": "url",
         }
         if references:
-            return "images/edits", body | {"mode": "image-to-image", "images": list(references)}
+            # The OpenAI-compatible edits endpoint takes `image` and infers the mode from it.
+            return "images/edits", body | {"image": list(references)}
         return "images/generations", body
     body = {
         "model": model,

@@ -86,7 +86,6 @@ def test_catalog_and_model_capabilities_are_authenticated_and_secret_free(
         assert cap["model"] == "seedance_2.5" and cap["generation_durations"] == [
             5,
             10,
-            15,
             20,
             25,
             30,
