@@ -14,6 +14,8 @@ SLOT_WAIT_SECONDS = 15
 SLOT_CACHE_SECONDS = 30
 # A key whose account ran out of credit is skipped for this long; an admin top-up is picked up after it.
 OUT_OF_CREDIT = "seedvis_insufficient_credits"
+# Older ai-service builds reported a 402 without its documented code under this name.
+OUT_OF_CREDIT_CODES = {OUT_OF_CREDIT, "seedvis_provider_http_402"}
 OUT_OF_CREDIT_SECONDS = 1800
 
 
@@ -213,7 +215,7 @@ class GenerationOrchestrator:
                 raise
             result = self.client.call(job["provider"], "status", task_id=job["provider_task_id"],
                                       **poll_options, **credential)
-        if result["status"] == "failed" and result.get("error_code") == OUT_OF_CREDIT and self._rotate_credential(job):
+        if result["status"] == "failed" and result.get("error_code") in OUT_OF_CREDIT_CODES and self._rotate_credential(job):
             # Seedvis closes such a task unbilled; it is resubmitted on another account.
             return
         statuses = {
@@ -240,7 +242,7 @@ class GenerationOrchestrator:
         return self.settings.poll_seconds
 
     def _handle_error(self, job, error):
-        if error.code == OUT_OF_CREDIT and not job["provider_task_id"] and self._rotate_credential(job):
+        if error.code in OUT_OF_CREDIT_CODES and not job["provider_task_id"] and self._rotate_credential(job):
             return
         attempts = job["attempts"] + 1
         budget = min(

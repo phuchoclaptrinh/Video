@@ -316,3 +316,14 @@ async def test_reference_image_moves_to_the_next_key_when_one_is_out_of_credit(t
             failed = client.post("/internal/v1/planner/scene-image", json=body)
             assert failed.status_code == 502 and failed.json()["detail"] == "seedvis_insufficient_credits"
             assert used == ["test-key-first-123", "test-key-second-12"]
+
+
+@pytest.mark.parametrize("body", [{"success": False, "message": "Số dư không đủ"}, {"error": {"code": "PAYMENT"}}, {}])
+@pytest.mark.asyncio
+async def test_any_402_counts_as_out_of_credit(body):
+    provider = adapter(lambda _: httpx.Response(402, json=body))
+    async with provider.client:
+        with pytest.raises(ProviderError) as raised:
+            await provider.submit(provider.compile(ExecutionRequest.model_validate(request_body())))
+    assert raised.value.code == "seedvis_insufficient_credits"
+    assert not raised.value.retryable and not raised.value.ambiguous

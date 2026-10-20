@@ -155,6 +155,9 @@ class SeedvisProvider(VideoProviderAdapter):
             code = data.get("code") or (nested.get("code") if isinstance(nested, dict) else None)
             if not isinstance(code, str) or not re.fullmatch(r"[a-z_]{1,80}", code):
                 code = f"provider_http_{response.status_code}"
+            if response.status_code == 402:
+                # Live 402 bodies do not always carry the documented code; the status alone means no credit.
+                code = "insufficient_credits"
             known_rejection = code in {
                 "model_maintenance",
                 "server_busy",

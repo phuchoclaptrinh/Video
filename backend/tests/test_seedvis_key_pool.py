@@ -162,25 +162,29 @@ def test_settings_api_lists_usage_and_refuses_to_delete_a_busy_key(client):  # n
 class OutOfCreditClient(PoolClient):
     """keya's account has no credit: refused at submit, or accepted and then failed while queued."""
 
-    def __init__(self, at_submit=True):
+    def __init__(self, at_submit=True, code="seedvis_insufficient_credits"):
         super().__init__([{"id": "keya", "slots": 2}, {"id": "keyb", "slots": 2}])
         self.at_submit = at_submit
+        self.code = code
 
     def call(self, provider, action, **kwargs):
         if action != "validate" and kwargs.get("credential") == "keya":
             self.calls.append((action, "keya"))
             if action == "submit" and self.at_submit:
-                raise ExecutionError("seedvis_insufficient_credits")
+                raise ExecutionError(self.code)
             if action == "submit":
                 return {"provider": provider, "provider_task_id": "task-a", "status": "queued"}
             return {"provider": provider, "provider_task_id": kwargs["task_id"], "status": "failed",
-                    "error_code": "seedvis_insufficient_credits", "outputs": []}
+                    "error_code": self.code, "outputs": []}
         return super().call(provider, action, **kwargs)
 
 
-@pytest.mark.parametrize("at_submit", [True, False])
-def test_a_key_out_of_credit_hands_its_task_to_another_key(runtime, at_submit):
-    runtime.client = OutOfCreditClient(at_submit)
+@pytest.mark.parametrize("at_submit,code", [
+    (True, "seedvis_insufficient_credits"), (False, "seedvis_insufficient_credits"),
+    (True, "seedvis_provider_http_402"),
+])
+def test_a_key_out_of_credit_hands_its_task_to_another_key(runtime, at_submit, code):
+    runtime.client = OutOfCreditClient(at_submit, code)
     gid = enqueue(runtime, "scene-credit")
     job = runtime.tick(gid)
     if not at_submit:
