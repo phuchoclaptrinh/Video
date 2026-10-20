@@ -2,12 +2,20 @@
 
 import copy
 import os
+import time
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import insert, select, update
 
-from app.services.platform_shared import drafts, story_plan_versions, video_projects
+from app.services.platform_shared import (
+    drafts,
+    platform_settings,
+    story_plan_versions,
+    video_projects,
+)
+
+IMAGE_PROVIDER_KEY = "image_provider"
 
 
 class PlatformProvidersMixin:
@@ -19,6 +27,41 @@ class PlatformProvidersMixin:
             "seedance": os.getenv("SEEDANCE_MODEL", "seedance-1-5-pro-251215"),
             "fake": "fake",
         }[provider]
+
+    def image_default(self) -> dict:
+        """Image provider and model for new drafts: the admin's choice, else the server environment."""
+        with self.engine.connect() as db:
+            saved = db.execute(
+                select(platform_settings.c.value).where(platform_settings.c.key == IMAGE_PROVIDER_KEY)
+            ).scalar_one_or_none()
+        if saved:
+            return {"provider": saved["provider"], "model": saved["model"]}
+        provider = os.getenv("IMAGE_PROVIDER", "openai")
+        return {
+            "provider": provider,
+            "model": os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2")
+            if provider == "seedvis"
+            else os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare"),
+        }
+
+    def set_image_default(self, provider: str, model: str) -> dict:
+        item = next(
+            (p for p in self.provider_catalog(refresh=True)["image_providers"] if p["id"] == provider), None
+        )
+        found = next((m for m in item["models"] if m["id"] == model), None) if item else None
+        if found is None:
+            raise HTTPException(422, "unsupported_image_provider_model")
+        if found.get("available") is False:
+            raise HTTPException(409, f"Model {model} chưa khả dụng trên {item['label']}. Hãy chọn model khác.")
+        value = {"provider": provider, "model": model}
+        with self.engine.begin() as db:
+            updated = db.execute(
+                update(platform_settings).where(platform_settings.c.key == IMAGE_PROVIDER_KEY)
+                .values(value=value, updated=time.time())
+            ).rowcount
+            if not updated:
+                db.execute(insert(platform_settings).values(key=IMAGE_PROVIDER_KEY, value=value, updated=time.time()))
+        return value
 
     def provider_catalog(self, *, refresh: bool = False) -> dict:
         try:
@@ -58,11 +101,14 @@ class PlatformProvidersMixin:
                 )
             previous = payload.get("render_target", {})
         provider = body.provider or previous.get("provider") or self.provider
-        image_provider = (
-            body.image_provider
-            or previous.get("image_provider")
-            or os.getenv("IMAGE_PROVIDER", "openai")
-        )
+        image_default = self.image_default()
+        if not self.credit_exempt(uid):
+            # Members always render images with the provider the admin picked.
+            # Campaign items arrive as a SimpleNamespace, so copy generically rather than via pydantic.
+            body = copy.copy(body)
+            body.image_provider = body.image_model = None
+            previous = {key: value for key, value in previous.items() if not key.startswith("image_")}
+        image_provider = body.image_provider or previous.get("image_provider") or image_default["provider"]
         target = {
             "provider": provider,
             "video_model": body.video_model
@@ -76,7 +122,9 @@ class PlatformProvidersMixin:
                 else None
             )
             or (
-                os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2")
+                image_default["model"]
+                if image_default["provider"] == image_provider
+                else os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2")
                 if image_provider == "seedvis"
                 else os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
             ),

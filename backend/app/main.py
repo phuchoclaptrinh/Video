@@ -112,6 +112,11 @@ class ClipPrice(BaseModel):
     seconds: int = Field(ge=1, le=60)
 
 
+class ImageProviderInput(BaseModel):
+    provider: Literal["openai", "seedvis"]
+    model: str = Field(min_length=1, max_length=128)
+
+
 class CreditPricing(BaseModel):
     signup_bonus: int = Field(ge=0, le=1_000_000)
     video_clip: dict[Annotated[str, Field(max_length=80)], ClipPrice] = Field(max_length=100)
@@ -230,6 +235,7 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
         is_poyo = platform.provider == "poyo"
         planner = platform.planner_credential_status()
         capabilities = platform._continuity_strategy().capabilities
+        image_default = platform.image_default()
         return {
             "mode": platform.mode,
             "provider": platform.provider,
@@ -237,8 +243,8 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
             "planner": "openai" if planner["configured"] else "template",
             "planner_model": os.getenv("OPENAI_PLANNER_MODEL", "gpt-4o-mini"),
             "model": capabilities.model,
-            "image_provider": os.getenv("IMAGE_PROVIDER", "openai"),
-            "image_model": os.getenv("SEEDVIS_IMAGE_MODEL", "gpt-image-2") if os.getenv("IMAGE_PROVIDER") == "seedvis" else os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare"),
+            "image_provider": image_default["provider"],
+            "image_model": image_default["model"],
             "native_audio": capabilities.native_audio,
             "duration_control": bool(capabilities.generation_durations),
             "duration_options": capabilities.generation_durations if platform.provider != "fake" or planner["configured"] else [5, 8, 10],
@@ -544,6 +550,14 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
     @app.put("/api/v1/admin/credit-pricing")
     def admin_set_credit_pricing(body: CreditPricing, user=Depends(admin)):
         return app.state.platform.set_credit_pricing(body.model_dump())
+
+    @app.get("/api/v1/admin/image-provider")
+    def admin_image_provider(user=Depends(admin)):
+        return app.state.platform.image_default()
+
+    @app.put("/api/v1/admin/image-provider")
+    def admin_set_image_provider(body: ImageProviderInput, user=Depends(admin)):
+        return app.state.platform.set_image_default(body.provider, body.model)
 
     @app.post("/api/v1/assets", status_code=201)
     async def upload(file: UploadFile = File(...), user=Depends(current)):

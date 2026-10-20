@@ -125,7 +125,7 @@ class PlatformCreditsMixin:
 
     # Model visibility ----------------------------------------------------------------------
     def visible_catalog(self, catalog: dict, uid: str) -> dict:
-        """Members only see the video models the admin has opened to them."""
+        """Members only see the video models the admin has opened to them and the admin's image model."""
         if self.credit_exempt(uid):
             return catalog
         hidden = set(self.credit_pricing()["hidden_models"])
@@ -134,7 +134,12 @@ class PlatformCreditsMixin:
             models = [model for model in provider["models"] if f"{provider['id']}:{model['id']}" not in hidden]
             if models:
                 providers.append({**provider, "models": models})
-        return {**catalog, "video_providers": providers}
+        image = self.image_default()
+        images = [
+            {**provider, "models": [model for model in provider["models"] if model["id"] == image["model"]]}
+            for provider in catalog["image_providers"] if provider["id"] == image["provider"]
+        ]
+        return {**catalog, "video_providers": providers, "image_providers": images}
 
     def require_visible_model(self, uid: str, provider: str, model: str) -> None:
         if f"{provider}:{model}" in self.credit_pricing()["hidden_models"] and not self.credit_exempt(uid):

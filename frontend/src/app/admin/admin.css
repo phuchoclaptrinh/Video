@@ -357,6 +357,20 @@
   gap: 12px;
   max-width: 760px;
 }
+.admin-image-provider-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.admin-box > .flow-key-section > .admin-note {
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .admin-box .flow-provider-selects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .flow-admin-note .flow-button {
   margin-top: 12px;
 }
