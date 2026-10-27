@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 from sqlalchemy.engine import make_url
@@ -53,31 +54,42 @@ def slim_sqlite_database(database_url: str, objects=None) -> None:
     path = Path(url.database)
     if not path.is_file():
         return
-    db = sqlite3.connect(path)
-    try:
+    finished = "status IN ({})".format(", ".join(f"'{s}'" for s in FINISHED_JOBS))
+    with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as db:
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        stripped = 0
-        if "video_execution_jobs" in tables:
-            stripped += _strip(db, "video_execution_jobs", "generation_id",
-                               "status IN ({})".format(", ".join(f"'{s}'" for s in FINISHED_JOBS)))
-        if "platform_drafts" in tables:
-            # Drafts are only shown, never sent: their stored payload images are not used again.
-            stripped += _strip(db, "platform_drafts", "id", "1 = 1")
-        if stripped:
-            logger.info("Dropped inline images from %s finished rows", stripped)
-        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        pending = any(
+            table in tables and db.execute(
+                f"SELECT 1 FROM {table} WHERE payload LIKE '%\"data:%' AND {where} LIMIT 1"  # noqa: S608
+            ).fetchone()
+            for table, where in (("video_execution_jobs", finished), ("platform_drafts", "1 = 1"))
+        )
         page_size = db.execute("PRAGMA page_size").fetchone()[0]
         free = db.execute("PRAGMA freelist_count").fetchone()[0] * page_size
         total = db.execute("PRAGMA page_count").fetchone()[0] * page_size
-        if free < MIN_FREE_BYTES or free < total * MIN_FREE_SHARE:
-            return
         before = _counts(db)
-        compact = Path(tempfile.mkdtemp(prefix="vo3-compact-")) / path.name
-        db.execute("VACUUM INTO ?", (str(compact),))
-    finally:
-        db.close()
+    if not pending and (free < MIN_FREE_BYTES or free < total * MIN_FREE_SHARE):
+        return
+    # All rewriting happens on a copy in the container's temporary disk: the volume may be too full for
+    # even the rollback journal, and is only written once, when the much smaller file replaces the original.
+    work_dir = Path(tempfile.mkdtemp(prefix="vo3-compact-"))
+    work, compact = work_dir / "work.sqlite3", work_dir / path.name
     keep_compact = False
     try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as source,                 closing(sqlite3.connect(work)) as copy:
+            source.backup(copy)
+        db = sqlite3.connect(work)
+        try:
+            stripped = 0
+            if "video_execution_jobs" in tables:
+                stripped += _strip(db, "video_execution_jobs", "generation_id", finished)
+            if "platform_drafts" in tables:
+                # Drafts are only shown, never sent: their stored payload images are not used again.
+                stripped += _strip(db, "platform_drafts", "id", "1 = 1")
+            if stripped:
+                logger.warning("Dropped inline images from %s finished rows", stripped)
+            db.execute("VACUUM INTO ?", (str(compact),))
+        finally:
+            db.close()
         check = sqlite3.connect(compact)
         try:
             healthy = check.execute("PRAGMA integrity_check").fetchone()[0] == "ok" and _counts(check) == before
@@ -101,10 +113,10 @@ def slim_sqlite_database(database_url: str, objects=None) -> None:
             keep_compact = True
             logger.critical("Could not move the compacted database into place; it is kept at %s", compact)
             raise
-        logger.info("Compacted %s from %.1f MB to %.1f MB", path.name, total / 1e6, os.path.getsize(path) / 1e6)
+        logger.warning("Compacted %s from %.1f MB to %.1f MB", path.name, total / 1e6, os.path.getsize(path) / 1e6)
     finally:
         if not keep_compact:
-            shutil.rmtree(compact.parent, ignore_errors=True)
+            shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def run_startup_upkeep(database_url: str, objects=None) -> None:
