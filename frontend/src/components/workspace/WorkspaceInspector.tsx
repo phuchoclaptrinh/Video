@@ -43,7 +43,9 @@ export function WorkspaceInspector({
               event={selected.event}
               compact
               busy={Boolean(w.videoBusyId) || w.sending || Boolean(outdated)}
-              onGenerate={(paid) => void w.generateVideo(selected.message, selected.event, paid)}
+              onGenerate={(paid, product) =>
+                void w.generateVideo(selected.message, selected.event, paid, false, product)
+              }
               onApprove={() => void w.approveVideo(selected.message, selected.event)}
               onReplan={(prompt) => void w.reviseVideo(selected.message, selected.event, prompt)}
               onPrepareReference={() => void w.prepareReference(selected.message, selected.event)}

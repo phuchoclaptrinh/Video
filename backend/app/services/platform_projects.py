@@ -556,7 +556,7 @@ class PlatformProjectsMixin:
     def generate_approved_video(
         self, uid: str, project_id: str, confirm_paid: bool,
         voice_mode: str | None = None, native_audio: bool | None = None,
-        expected_draft_id: str | None = None,
+        expected_draft_id: str | None = None, product_reference: bool | None = None,
     ) -> dict:
         project = self.owned(video_projects, project_id, uid)
         with self.engine.connect() as db:
@@ -571,4 +571,5 @@ class PlatformProjectsMixin:
             raise HTTPException(409, "Hay duyet kich ban truoc khi tao video")
         if expected_draft_id and version["draft_id"] != expected_draft_id:
             raise HTTPException(409, "Kịch bản đã thay đổi. Hãy mở bản nháp mới nhất và duyệt lại trước khi tạo video.")
-        return self.generate(uid, version["draft_id"], confirm_paid, native_audio=native_audio, voice_mode=voice_mode)
+        return self.generate(uid, version["draft_id"], confirm_paid, native_audio=native_audio, voice_mode=voice_mode,
+                             product_reference=product_reference)

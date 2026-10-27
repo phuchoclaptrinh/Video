@@ -33,7 +33,7 @@ class Output(Contract):
 
 class Reference(Contract):
     asset_id: Identifier
-    role: Literal["FIRST_FRAME", "LAST_FRAME", "CHARACTER_REFERENCE", "STYLE_REFERENCE"]
+    role: Literal["FIRST_FRAME", "LAST_FRAME", "CHARACTER_REFERENCE", "STYLE_REFERENCE", "PRODUCT_REFERENCE"]
     strength: Literal["low", "medium", "high"] = "high"
 
 

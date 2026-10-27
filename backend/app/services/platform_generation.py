@@ -1,9 +1,9 @@
 """Clip payload construction and provider credential forwarding."""
 
+from app.services.inline_assets import FILE_REF_PREFIX, file_ref
 from app.services.platform_shared import (
     HTTPException,
     assets,
-    base64,
     copy,
     drafts,
     hashlib,
@@ -29,7 +29,36 @@ from app.services.voice_pipeline import VoiceMode, choose_voice_mode
 
 EXECUTION_FIELDS = ("model", "spec", "assets", "preflight_decision", "policy_decision_id")
 
+# Each scene sends at most three images in product mode: the planned scene and two product photos.
+PRODUCT_PHOTO_LIMIT = 2
+
 class PlatformGenerationMixin:
+    def _with_product_photos(self, draft: dict, strategy, request: ContinuityRequest) -> ContinuityRequest:
+        """Product mode (testing): send the seller's own product photos to the video model with the scene image.
+
+        Seedvis only takes several images as reference images, so the scene image stops being a start frame:
+        the product follows the photos more closely while the opening composition is no longer pinned.
+        """
+        payload = draft["payload"]
+        if not payload.get("product_reference") or self.provider != "seedvis":
+            return request
+        if not strategy.capabilities.reference_images:
+            return request
+        opening = next((ref for ref in request.references if ref.role == "FIRST_FRAME"), None)
+        photos = list(payload.get("input_asset_ids") or [
+            ref["asset_id"] for ref in payload["spec"].get("references") or []
+        ])[:PRODUCT_PHOTO_LIMIT]
+        if opening is None or not photos:
+            return request
+        return ContinuityRequest(
+            "product_references",
+            (ContinuityReference(opening.kind, opening.identifier, "STYLE_REFERENCE"),
+             *(ContinuityReference("asset", photo, "PRODUCT_REFERENCE") for photo in photos)),
+            request.parent_generation_id,
+            parent_video_url=request.parent_video_url,
+            parent_asset_path=request.parent_asset_path,
+        )
+
     def generate(
         self,
         uid: str,
@@ -39,8 +68,16 @@ class PlatformGenerationMixin:
         continuity_generation_id: str | None = None,
         native_audio: bool | None = None,
         voice_mode: str | None = None,
+        product_reference: bool | None = None,
     ):
         draft = self.owned(drafts, draft_id, uid)
+        if product_reference is not None and bool(draft["payload"].get("product_reference")) != product_reference:
+            # Stored on the draft so every scene of this render, and its automatic retries, use the same mode.
+            stored = copy.deepcopy(draft["payload"])
+            stored["product_reference"] = product_reference
+            with self.engine.begin() as db:
+                db.execute(update(drafts).where(drafts.c.id == draft_id).values(payload=stored))
+            draft = draft | {"payload": stored}
         scoped = self._for_draft(draft)
         if scoped is not self:
             return scoped.generate(uid, draft_id, confirm_paid, clip_index, continuity_generation_id, native_audio, voice_mode)
@@ -107,6 +144,7 @@ class PlatformGenerationMixin:
                         parent_video_url=continuity_request.parent_video_url,
                         parent_asset_path=continuity_request.parent_asset_path,
                     )
+                continuity_request = self._with_product_photos(draft, strategy, continuity_request)
                 if native_audio and not clip["voice_script"].strip():
                     raise ValueError("native_audio_requires_scene_dialogue")
                 if native_audio and not strategy.native_audio_supported:
@@ -131,12 +169,17 @@ class PlatformGenerationMixin:
                         f"{reference.kind}-{reference.identifier}"
                         if reference.kind in {"character", "style"} else reference.identifier
                     )
+                    if reference.kind == "asset":
+                        stored = self.owned(assets, reference.identifier, uid)
+                        source = file_ref(self.storage, self.storage / stored["filename"])
+                    else:
+                        source = self._continuity_source(reference.kind, reference.identifier)
                     payload["spec"]["references"].append({
                         "asset_id": asset_id, "role": reference.role, "strength": "high",
                     })
                     payload["assets"].append({
                         "asset_id": asset_id, "mime_type": "image/jpeg",
-                        "source_url": self._continuity_source(reference.kind, reference.identifier),
+                        "source_url": source,
                         "moderation_status": "APPROVED",
                     })
             payload["spec"].setdefault("constraints", {})["preserve_identity"] = bool(
@@ -219,11 +262,10 @@ class PlatformGenerationMixin:
             self.provider == "poyo" and not self._poyo_public_urls
         ):
             for item in payload["assets"]:
-                if item["source_url"].startswith("data:image/jpeg;base64,"):
+                if item["source_url"].startswith(("data:image/jpeg;base64,", FILE_REF_PREFIX)):
                     continue
                 asset = self.owned(assets, item["asset_id"], uid)
-                raw = (self.storage / asset["filename"]).read_bytes()
-                item["source_url"] = "data:image/jpeg;base64," + base64.b64encode(raw).decode()
+                item["source_url"] = file_ref(self.storage, self.storage / asset["filename"])
         elif self.provider == "poyo" and payload["assets"] and not all(
             item["source_url"].startswith("https://") for item in payload["assets"]
         ):

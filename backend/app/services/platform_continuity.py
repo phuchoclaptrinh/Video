@@ -4,13 +4,13 @@ import shutil
 import tempfile
 
 from app.services.continuity_frames import FrameCandidate, choose_continuity_frame
+from app.services.inline_assets import file_ref
 from app.services.platform_shared import (
     HTTPException,
     Image,
     ImageOps,
     Path,
     assets,
-    base64,
     drafts,
     hashlib,
     hmac,
@@ -80,17 +80,18 @@ class PlatformContinuityMixin:
     def _continuity_source(self, kind: str, reference_id: str) -> str:
         if self._poyo_public_urls:
             return self.continuity_reference_url(kind, reference_id)
+        # A file reference, inlined only when the request is sent (see inline_assets).
         if kind in {"character", "style", "keyframe"}:
             path = self.storage / "continuity" / f"{kind}-{reference_id}.jpg"
             if not path.is_file():
                 raise HTTPException(404, "Continuity reference image is missing")
-            return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode()
+            return file_ref(self.storage, path)
         if kind not in {"scene", "frame"}:
             raise HTTPException(422, "Unsupported continuity reference")
         path = self.storage / "continuity" / f"{reference_id}.jpg"
         if not path.is_file():
             raise HTTPException(404, "Continuity reference frame is missing")
-        return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode()
+        return file_ref(self.storage, path)
 
     def _ensure_character_reference_images(self, draft_id: str, anchor: Path) -> None:
         directory = self.storage / "continuity"

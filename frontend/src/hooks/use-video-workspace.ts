@@ -540,6 +540,7 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
     event: VideoEvent,
     confirmPaid: boolean,
     approveFirst = false,
+    productReference?: boolean,
   ) {
     if (sending || videoBusyId) return;
     if (event.plan.mode === 'live' && !confirmPaid) {
@@ -565,7 +566,11 @@ export function useVideoWorkspace(config: WorkspaceConfig) {
         : `/plans/${event.plan.id}/generate`;
       const job = await request<VideoJob>(renderPath, {
         method: 'POST',
-        body: JSON.stringify({ confirm_paid: confirmPaid, expected_draft_id: event.plan.id }),
+        body: JSON.stringify({
+          confirm_paid: confirmPaid,
+          expected_draft_id: event.plan.id,
+          ...(productReference === undefined ? {} : { product_reference: productReference }),
+        }),
       });
       const updated = await request<ChatMessage>(`/chat/video-events/${message.id}`, {
         method: 'PUT',

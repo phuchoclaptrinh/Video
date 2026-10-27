@@ -18,6 +18,10 @@ class SeedvisCompiler:
         roles = [ref.role for ref in spec.references]
         valid_roles = roles in ([], ["FIRST_FRAME"], ["CHARACTER_REFERENCE", "STYLE_REFERENCE", "FIRST_FRAME"])
         valid_roles |= self.model == "Veo-3.1" and roles == ["FIRST_FRAME", "LAST_FRAME"]
+        # Product mode: the planned scene image plus up to two photos of the real product, sent together as
+        # reference images (Omni `images`, Veo `referenceImages`, Seedance `reference_images`), never a start frame.
+        valid_roles |= (roles[:1] == ["STYLE_REFERENCE"] and 2 <= len(roles) <= 3
+                        and set(roles[1:]) == {"PRODUCT_REFERENCE"})
         return (valid_roles and spec.output.aspect_ratio in self.capabilities.ratios
                 # A model without a duration field ignores the requested length instead of rejecting it.
                 and (not self.capabilities.durations or not self.capabilities.duration_parameter

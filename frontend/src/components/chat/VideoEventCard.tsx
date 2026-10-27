@@ -29,7 +29,7 @@ export function VideoEventCard({
 }: {
   event: VideoEvent;
   busy: boolean;
-  onGenerate: (confirmPaid: boolean) => void;
+  onGenerate: (confirmPaid: boolean, productReference?: boolean) => void;
   onReplan: (prompt: string) => void;
   onReviseFailedScene: (sceneIndex: number, videoPrompt: string, voiceScript: string) => void;
   onPrepareReference: () => void;
@@ -37,9 +37,28 @@ export function VideoEventCard({
   onApprove: () => void;
   compact?: boolean;
   storyboard?: boolean;
-  onApproveAndGenerate?: (paid: boolean) => void;
+  onApproveAndGenerate?: (paid: boolean, productReference?: boolean) => void;
 }) {
   const [confirmPaid, setConfirmPaid] = useState(false);
+  const [productReference, setProductReference] = useState(false);
+  // Testing: Seedvis can also receive the seller's product photos as reference images.
+  const productModeAvailable =
+    event.plan.mode === 'live' &&
+    (event.plan.input_asset_ids?.length ?? 0) > 0 &&
+    event.plan.render_target?.provider === 'seedvis';
+  const productMode = productModeAvailable && (
+    <label className="gpt-paid-confirm">
+      <input
+        type="checkbox"
+        checked={productReference}
+        onChange={(change) => setProductReference(change.target.checked)}
+      />
+      <span>
+        <b>Thử nghiệm:</b> gửi ảnh sản phẩm gốc cho model video. Sản phẩm bám ảnh gốc hơn, nhưng
+        cảnh mở đầu không còn giữ đúng ảnh kịch bản.
+      </span>
+    </label>
+  );
   const [revision, setRevision] = useState('');
   const clips = event.plan.story_plan?.clips || [];
   const direct = event.plan.creation_mode === 'direct';
@@ -398,12 +417,15 @@ export function VideoEventCard({
                 Tôi đồng ý tạo video có thể phát sinh phí
               </label>
             )}
+            {productMode}
             <CreditCost plans={[event.plan]} />
           </div>
           <button
             className="gpt-video-action"
             disabled={busy || storyHasPlaceholders || (event.plan.mode === 'live' && !confirmPaid)}
-            onClick={() => onApproveAndGenerate(confirmPaid)}
+            onClick={() =>
+              onApproveAndGenerate(confirmPaid, productModeAvailable ? productReference : undefined)
+            }
           >
             {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />} Duyệt và
             tạo video
@@ -430,11 +452,14 @@ export function VideoEventCard({
               Tôi đồng ý tạo video có thể phát sinh phí
             </label>
           )}
+          {productMode}
           <CreditCost plans={[event.plan]} />
           <button
             className="gpt-video-action"
             disabled={busy || storyHasPlaceholders || (event.plan.mode === 'live' && !confirmPaid)}
-            onClick={() => onGenerate(confirmPaid)}
+            onClick={() =>
+              onGenerate(confirmPaid, productModeAvailable ? productReference : undefined)
+            }
           >
             {busy ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
             {event.plan.mode === 'live' ? 'Xác nhận và tạo video' : 'Tạo video demo'}

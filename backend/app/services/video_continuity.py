@@ -43,6 +43,13 @@ PRODUCT_LOCK_RULE = (
     "prints, graphics, trims and matching pieces. Never redesign, recolor, swap prints, merge variants, or add "
     "or remove items; whoever wears or holds a variant keeps that exact variant."
 )
+# Product mode sends the product photos themselves, so the lock points at them instead of a first frame.
+PRODUCT_PHOTO_LOCK_RULE = (
+    "Product lock: the product photos among the reference images show the real items being sold. Keep every "
+    "product identical to those photos for the whole shot, including close-ups and camera moves: same cut, colors, "
+    "print pattern and its placement, graphics, trims, collar and matching pieces. Never redesign, recolor, "
+    "simplify the print, merge variants, or add or remove items."
+)
 SCENE_TRANSITIONS = {"continue", "hard_cut", "match_cut", "intentional_camera_transition", "fade_to_black"}
 CUT_TRANSITIONS = {"hard_cut", "match_cut", "fade_to_black"}
 
@@ -170,7 +177,12 @@ def build_scene_prompt(
     bounded_context = []
 
     if request.references:
-        if request.mode == "image_references":
+        if request.mode == "product_references":
+            visual = (
+                "Reference image 1 is the planned scene: open on its subject, setting, wardrobe, props and framing. "
+                "The other reference images are photos of the real product; use them only for the product's exact look."
+            )
+        elif request.mode == "image_references":
             visual = (
                 "Use the character reference for identity and the style reference for visual treatment. "
                 "The final image is previous-shot context, not the new opening composition. "
@@ -194,7 +206,7 @@ def build_scene_prompt(
     parts.append("Visual context: " + visual)
     look = plan.get("visual_bible") or plan.get("visual_continuity")
     if product and request.references:
-        parts.append(PRODUCT_LOCK_RULE)
+        parts.append(PRODUCT_PHOTO_LOCK_RULE if request.mode == "product_references" else PRODUCT_LOCK_RULE)
         if look:
             bounded_context.append((len(parts), "Product description: ", look, 240))
             parts.append("Product description: " + look)

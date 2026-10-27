@@ -15,6 +15,7 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from sqlalchemy import delete
 
+from app.services.db_maintenance import run_startup_upkeep
 from app.services.object_storage import ObjectStorage
 from app.services.platform import Platform, assets, sessions
 from app.services.platform_style_learning import MAX_REFERENCE_BYTES
@@ -74,6 +75,8 @@ class GenerateInput(BaseModel):
     clip_index: int | None = Field(default=None, ge=1, le=5)
     native_audio: bool | None = Field(default=None, strict=True)
     voice_mode: Literal["native_veo", "consistent_voice"] | None = None
+    # Testing: send the seller's product photos to the video model as reference images.
+    product_reference: bool | None = Field(default=None, strict=True)
 
 
 class ProviderCredentialInput(BaseModel):
@@ -163,17 +166,20 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
         if current is None:
             key = os.environ["INTERNAL_API_KEY"]
             storage = Path(os.getenv("STORAGE_LOCAL_PATH", "./storage"))
+            database_url = os.getenv(
+                "VIDEO_EXECUTION_DATABASE_URL", "sqlite:///" + str(storage / "mvp.sqlite3")
+            )
+            objects = ObjectStorage.from_env()
+            run_startup_upkeep(database_url, objects)
             current = Platform(
-                os.getenv(
-                    "VIDEO_EXECUTION_DATABASE_URL", "sqlite:///" + str(storage / "mvp.sqlite3")
-                ),
+                database_url,
                 storage,
                 os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8001"),
                 key,
                 provider=os.getenv("VIDEO_PROVIDER", "fake").lower(),
                 paid_enabled=os.getenv("ENABLE_PAID_GENERATION", "false").lower() == "true",
                 public_base_url=os.getenv("PUBLIC_BASE_URL"),
-                object_storage=ObjectStorage.from_env(),
+                object_storage=objects,
             )
         app.state.platform = current
         if run_worker and os.getenv("LOCAL_VIDEO_WORKER", "true") == "true":
@@ -402,7 +408,7 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
         return app.state.platform.generate_approved_video(
             user["id"], project_id, body.confirm_paid,
             voice_mode=body.voice_mode, native_audio=body.native_audio,
-            expected_draft_id=body.expected_draft_id,
+            expected_draft_id=body.expected_draft_id, product_reference=body.product_reference,
         )
 
     @app.post("/api/v1/video-projects/{project_id}/plans", status_code=201)
@@ -595,6 +601,7 @@ def create_app(platform: Platform | None = None, run_worker: bool = True):
             body.clip_index if body is not None else None,
             native_audio=body.native_audio if body else None,
             voice_mode=body.voice_mode if body else None,
+            product_reference=body.product_reference if body else None,
         )
 
     @app.get("/api/v1/generations")

@@ -75,7 +75,9 @@ def test_seedvis_uploaded_image_uses_inline_bytes_no_public_tunnel(client, monke
     assert response.status_code == 202, response.text
     job = platform.store.get(response.json()["id"])
     assert job["provider"] == "seedvis"
-    assert job["payload"]["assets"][0]["source_url"].startswith("data:image/jpeg;base64,")
+    # The stored job keeps a file reference; the image travels inline only in the request sent.
+    assert job["payload"]["assets"][0]["source_url"].startswith("vo3-file:")
+    assert platform.runtime._outgoing(job["payload"])["assets"][0]["source_url"].startswith("data:image/jpeg;base64,")
     assert not platform.public_base_url
 
 
@@ -102,7 +104,8 @@ def test_poyo_uploaded_image_is_sent_inline_without_public_tunnel(client):
     assert response.status_code == 202, response.text
     job = platform.store.get(response.json()["id"])
     assert job["provider"] == "poyo"
-    assert job["payload"]["assets"][0]["source_url"].startswith("data:image/jpeg;base64,")
+    assert job["payload"]["assets"][0]["source_url"].startswith("vo3-file:")
+    assert platform.runtime._outgoing(job["payload"])["assets"][0]["source_url"].startswith("data:image/jpeg;base64,")
     assert set(job["payload"]) <= {"model", "spec", "assets", "preflight_decision", "policy_decision_id"}
 
 
@@ -2564,7 +2567,9 @@ def test_three_scene_chain_uses_latest_real_video_url_and_native_audio(client, m
         for gid in (first, second, third):
             job = platform.store.get(gid)
             assert job["provider"] == "seedvis"
-            assert all(asset["source_url"].startswith("data:image/jpeg;base64,") for asset in job["payload"]["assets"])
+            assert all(asset["source_url"].startswith("vo3-file:") for asset in job["payload"]["assets"])
+            sent = platform.runtime._outgoing(job["payload"])["assets"]
+            assert all(asset["source_url"].startswith("data:image/jpeg;base64,") for asset in sent)
     voice_lines = [next(line for line in prompt.splitlines() if line.startswith("VOICE DESCRIPTION")) for prompt in prompts]
     assert voice_lines[0] == voice_lines[1] == voice_lines[2]
     assert all("VOICE MATCH RULES" not in prompt and "CONTINUE THE PREVIOUS VIDEO" not in prompt for prompt in prompts)

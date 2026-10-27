@@ -1,5 +1,6 @@
 """Application platform facade preserving the existing public import path."""
 
+from app.services.inline_assets import inline_payload
 from app.services.platform_admin import PlatformAdminMixin
 from app.services.platform_auto_retry import AUTO_RETRY_LIMIT, PlatformAutoRetryMixin
 from app.services.platform_campaigns import PlatformCampaignsMixin
@@ -109,6 +110,7 @@ class Platform(
         self.runtime = GenerationOrchestrator(
             self.store, VideoExecutionClient(self.http), ExecutionSettings(poll_seconds=10)
         )
+        self.runtime.asset_resolver = lambda payload: inline_payload(self.storage, payload)
         self.stop = threading.Event()
         self.batch_lock = threading.Lock()
         self.campaign_lock = threading.Lock()

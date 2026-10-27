@@ -78,9 +78,11 @@ export function WorkflowStage({
           compact
           storyboard
           busy={Boolean(w.videoBusyId) || w.sending || outdated}
-          onGenerate={(paid) => void w.generateVideo(selected.message, selected.event, paid)}
-          onApproveAndGenerate={(paid) =>
-            void w.generateVideo(selected.message, selected.event, paid, true)
+          onGenerate={(paid, product) =>
+            void w.generateVideo(selected.message, selected.event, paid, false, product)
+          }
+          onApproveAndGenerate={(paid, product) =>
+            void w.generateVideo(selected.message, selected.event, paid, true, product)
           }
           onApprove={() => void w.approveVideo(selected.message, selected.event)}
           onReplan={(prompt) => void w.reviseVideo(selected.message, selected.event, prompt)}

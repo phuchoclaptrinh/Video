@@ -327,3 +327,20 @@ async def test_any_402_counts_as_out_of_credit(body):
             await provider.submit(provider.compile(ExecutionRequest.model_validate(request_body())))
     assert raised.value.code == "seedvis_insufficient_credits"
     assert not raised.value.retryable and not raised.value.ambiguous
+
+
+@pytest.mark.parametrize("model,field", [("Omni-Flash", "images"), ("Veo-3.1", "referenceImages"),
+                                         ("seedance_2.5", "reference_images")])
+def test_product_photos_go_out_as_reference_images(model, field):
+    for roles in (("STYLE_REFERENCE", "PRODUCT_REFERENCE"), ("STYLE_REFERENCE", "PRODUCT_REFERENCE", "PRODUCT_REFERENCE")):
+        duration = VIDEO_MODELS[model].durations[0]
+        body = request_body(duration, roles)
+        if model != "seedance_2.5":
+            body["spec"]["output"]["generate_audio"] = True
+        payload = SeedvisCompiler(model).compile(ExecutionRequest.model_validate(body))
+        sent = payload["body"]
+        assert sent["mode"] == ("image-to-video" if model.startswith("seedance_") else "multi-image-to-video")
+        assert len(sent[field]) == len(roles) == payload["reference_count"] and "image" not in sent
+    # More than three images never get this far: the execution schema allows three references.
+    for roles in (("PRODUCT_REFERENCE",), ("PRODUCT_REFERENCE", "STYLE_REFERENCE")):
+        assert not SeedvisCompiler(model).supports(ExecutionRequest.model_validate(request_body(8, roles)).spec)

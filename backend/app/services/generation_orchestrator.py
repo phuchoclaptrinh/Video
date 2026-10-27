@@ -4,6 +4,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+from app.services.inline_assets import AssetFileMissing, restore_refs
 from app.services.video_execution_client import ExecutionError, VideoExecutionClient
 from app.services.video_execution_store import ExecutionStore
 
@@ -47,6 +48,16 @@ class GenerationOrchestrator:
         self._slot_lock = threading.Lock()
         self._slots_cache: tuple[float, list[dict] | None] = (0.0, None)
         self._out_of_credit: dict[str, float] = {}
+        # Turns stored file references into inline images for the request in flight (see inline_assets).
+        self.asset_resolver = None
+
+    def _outgoing(self, payload: dict) -> dict:
+        if self.asset_resolver is None:
+            return payload
+        try:
+            return self.asset_resolver(payload)
+        except AssetFileMissing:
+            raise ExecutionError("asset_file_missing") from None
 
     def out_of_credit(self) -> set[str]:
         now = time.monotonic()
@@ -110,9 +121,10 @@ class GenerationOrchestrator:
         return {"credential": credential} if credential else {}
 
     def enqueue(self, provider: str, payload: dict) -> dict:
-        validated = self.client.call(provider, "validate", payload=payload)
+        validated = self.client.call(provider, "validate", payload=self._outgoing(payload))
         # The durable QUEUED row is also the outbox; recovery dispatches it after broker failures.
-        return self.store.create(provider, validated["execution_request"])
+        # It keeps file references, not the inlined images that were validated.
+        return self.store.create(provider, restore_refs(payload, validated["execution_request"]))
 
     def tick(self, generation_id: str) -> dict:
         job = self.store.claim(generation_id, self.settings.lease_seconds)
@@ -191,7 +203,7 @@ class GenerationOrchestrator:
                     self.store.release(job, status="CANCELLED")
                     return
             credential = self._credential(job)
-            result = self.client.call(job["provider"], "submit", payload=job["payload"], **credential)
+            result = self.client.call(job["provider"], "submit", payload=self._outgoing(job["payload"]), **credential)
             self.store.release(
                 job,
                 delay=self._poll_delay(result, job["provider"]),
